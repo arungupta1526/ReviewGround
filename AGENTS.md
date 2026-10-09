@@ -19,8 +19,10 @@ This document establishes the mandatory architectural rules, Git workflows, secu
    - **Unit Tests**: Run `npm test` locally to ensure 100% of invariant and provider test suites pass cleanly.
    - **Inspect Changes**: Always check `git status`, `git diff`, and `git log -n 3 --oneline` before staging/committing to prevent accidental secret leaks or unneeded files.
    - **Environment Integrity**: Ensure any new environment variables or action inputs are documented in both `action.yml` and `README.md`. Never hardcode API keys, tokens, or private credentials into source code.
-4. **Strict No-Unsolicited-Push Rule**:
-   - Even if terminal execution permissions allow automatic progression, **NEVER execute `git push` to remote (`origin`) without informing and obtaining explicit confirmation from the user in chat first**. Committing locally is encouraged, but pushing to remote must always be pre-approved.
+4. **Strict No-Unsolicited-Push Rule & PR Creation Protocol**:
+   - **Never Push Automatically**: After committing locally, **NEVER execute `git push` to remote (`origin`) without informing and obtaining explicit confirmation from the user in chat first**. All commits must remain strictly local until pre-approved.
+   - **Auto-Create PR Upon Push Confirmation**: Once the user explicitly approves pushing, push the branch (`git push -u origin <branch>`). Always check first if a PR already exists for this branch (`gh pr list --head <branch>`); if an existing PR is found, inform the developer of the updated PR. If no PR exists, immediately open a Pull Request against `main` using GitHub CLI (`gh pr create`) with a detailed title, summary, and verification details.
+   - **Strict No-Unsolicited-Merge Rule**: **NEVER merge the PR into `main` automatically**. Always ask/inform the developer and wait for their explicit command before merging any PR.
 5. **Always Commit with Detailed Information**:
    - Never make short, vague, or one-liner commit messages (e.g., avoid `fix: updates` or `feat: changes`).
    - Every commit message MUST include:

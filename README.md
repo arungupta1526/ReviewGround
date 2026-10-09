@@ -208,7 +208,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           mode: review
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
 
 ---
@@ -239,8 +240,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           mode: review
-          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           model: 'qwen/qwen-2.5-coder-32b-instruct' # Or any model on OpenRouter!
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
 ---
@@ -272,9 +274,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           mode: review
           provider: 'custom'
-          llm-base-url: 'http://localhost:11434/v1' # Or https://api.together.xyz/v1
-          llm-api-key: ${{ secrets.LLM_API_KEY }}
           model: 'llama3.2'
+        env:
+          LLM_BASE_URL: 'http://localhost:11434/v1' # Or https://api.together.xyz/v1
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
 ```
 
 ---
@@ -322,10 +325,11 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           mode: all
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           gitleaks-result: ${{ needs.gitleaks.result }}
           build-result: ${{ needs.build-and-test.result }}
           test-result: ${{ needs.build-and-test.result }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
 
 ---
@@ -527,7 +531,8 @@ steps:
   - uses: arungupta1526/ReviewGround@v1
     with:
       enable-check-run: 'true'
-      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
 
 ### 2. PR Description Auto-Update with Risk Badge
@@ -538,7 +543,8 @@ steps:
   - uses: arungupta1526/ReviewGround@v1
     with:
       enable-pr-description-update: 'true'
-      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
 
 ### 3. Multi-Language Reviews
@@ -549,7 +555,8 @@ steps:
   - uses: arungupta1526/ReviewGround@v1
     with:
       review-language: 'ja' # 'ja', 'es', 'de', 'zh', 'pt', 'fr', etc.
-      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
 
 ### 4. Dynamic Extra Stages in CI Summary

@@ -15,6 +15,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hasCiData()` & Smart CI Verification Auto-Skip — In `mode: all` (default), automatically suppresses the Post-CI verification table if no CI stage results (`gitleaks-result`, `audit-result`, `build-result`, `test-result`, `extra-stages`) or matching workflow jobs are detected, eliminating noisy `unknown` status rows
 - Actionable missing-key setup guidance PR comments — When a pull request runs without any configured LLM API keys, ReviewGround posts a clean, interactive setup banner on the PR with direct links to free provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`)
 - Diagnostic failure notifications on PR comments — When all configured AI providers fail due to quota exhaustion, rate limits, or network timeouts, posts a diagnostic notice linking to GitHub Actions run logs
+
+### Changed
+- Prominently documented execution modes (`mode: review`, `mode: summary`, `mode: all`) in `README.md` and defaulted Quickstart workflow examples to `mode: review`
+- Standardized all workflow configuration examples in `README.md` to pass provider API keys and custom endpoints via GitHub Actions `env:` environment blocks instead of `with:` action inputs
+- Updated `action.yml` description for `mode` input to document Smart CI Verification Auto-Skip
+
+---
+
+## [1.0.0] - 2026-10-09
+
+### Added
+- Initial public release of **ReviewGround** GitHub Action on GitHub Marketplace
+- Multi-Provider BYOK engine: Gemini, OpenAI (GPT-4o), Anthropic Claude, Groq LPU, DeepSeek, OpenRouter, Custom/Ollama
+- Smart auto-detection of provider from model name prefix
+- Automatic provider failover chain when primary provider hits quota or errors
+- `fallback-models` input — comma-separated list of secondary models and providers to try sequentially upon failures
+- First-class `OpenRouterProvider` adapter with full model pass-through and optional site attribution headers (`HTTP-Referer`, `X-Title`)
+- Live npm registry search grounding — verifies package versions before LLM prompt to eliminate hallucinations
+- Google Search tool grounding for Gemini provider (`enable-search-grounding`)
+- Native GitHub 1-click `[ Apply suggestion ]` inline commit buttons (`enable-inline-suggestions`)
+- Sticky PR comment pattern — single comment updated via PATCH (no duplicate spam)
+- Post-CI summary table with status badges and real stage duration metrics (`9s`, `1m 24s`)
+- GitHub Actions Step Summary integration
+- Zero-commit model and provider switching via GitHub Repository Variables (`REVIEWGROUND_MODEL`, `REVIEWGROUND_PROVIDER`, `REVIEWGROUND_REVIEW_LEVEL`)
+- Automatic PR number detection from GitHub event payload
+- Dependabot/bot PR detection — skips review gracefully without failing CI
+- Dual diff strategy: local `git diff` with GitHub Pulls API fallback
+- Zod v4 schema validation for all inline suggestions (coerces string line numbers)
+- Node 24 LTS runtime, TypeScript 7.0, zero-dependency bundle via esbuild (<1MB)
 - `review-language` input — outputs AI review in any language (`ja`, `es`, `de`, `zh`, `pt`, `fr`, or any BCP-47 code, default `en`)
 - `enable-pr-description-update` input — auto-appends 🟢/🟡/🔴 risk badge + AI summary to PR body (opt-in, default `false`)
 - `enable-check-run` input — creates a GitHub Check Run pass/fail gate usable in branch protection rules; requires `checks: write` permission (opt-in, default `false`)
@@ -37,9 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Informational log when inline suggestion count is capped at 5
 - Verified competitive comparison matrix vs CodeRabbit, Qodo, PR-Agent, and Copilot in `README.md`
 - Expanded Mermaid end-to-end workflow architecture diagram with repository guidelines, merge gates, and extra stages in `README.md`
+- AGPL-3.0 open-source license
+- Self-dogfooding: ReviewGround reviews its own PRs in CI
 
 ### Fixed
 - **TypeScript Node Globals Resolution**: Added `"types": ["node"]` to `tsconfig.json` compilerOptions to guarantee global `process`, `console`, and `fetch` type declarations under NodeNext ESM packages (e.g. `@actions/core` v3)
+- **Active Model Endpoints**: Updated Gemini defaults to active endpoints (`gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`) and Groq models to `qwen/qwen3.8-27b` and `openai/gpt-oss-120b` to eliminate 404 deprecated model errors
+- **Custom Model Routing Preservation**: Preserved custom provider endpoints (`custom`, `openrouter`) without accidental hijacking or rerouting to fallback models
 - **Bug #1**: Hard diff truncation at 32,000 chars could cut mid-hunk — now truncates at clean `diff --git` boundaries
 - **Bug #2**: Sticky comment lookup only searched first 100 PR comments — fixed with full paginated lookup
 - **Bug #3**: `fs.appendFileSync` used inside async context — replaced with `await fs.promises.appendFile`
@@ -51,36 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Marketplace Description Limit**: Shortened `action.yml` description to 114 characters to comply with GitHub Marketplace's strict 125-character maximum requirement
 
 ### Changed
-- Prominently documented execution modes (`mode: review`, `mode: summary`, `mode: all`) in `README.md` and defaulted Quickstart workflow examples to `mode: review`
-- Updated `action.yml` description for `mode` input to document Smart CI Verification Auto-Skip
 - Review prompt is now dynamically generated based on `review-level` — reduces noise in `critical` mode
 - All 7 provider adapters now use shared `fetchWithRetry` instead of raw `fetch` + `AbortSignal.timeout` — adds automatic retry resilience with no behavior change for the happy path
 - `AGENTS.md` rule #7 added: mandatory CHANGELOG.md update required after every code change
-
----
-
-
-## [1.0.0] - 2026-10-09
-
-### Added
-- Initial public release of **ReviewGround** GitHub Action
-- Multi-Provider BYOK engine: Gemini, OpenAI (GPT-4o), Anthropic Claude, Groq LPU, DeepSeek, OpenRouter, Custom/Ollama
-- Smart auto-detection of provider from model name prefix
-- Automatic provider failover chain when primary provider hits quota or errors
-- Live npm registry search grounding — verifies package versions before LLM prompt to eliminate hallucinations
-- Google Search tool grounding for Gemini provider (`enable-search-grounding`)
-- Native GitHub 1-click `[ Apply suggestion ]` inline commit buttons (`enable-inline-suggestions`)
-- Sticky PR comment pattern — single comment updated via PATCH (no duplicate spam)
-- Post-CI summary table with status badges and real stage duration metrics (`9s`, `1m 24s`)
-- GitHub Actions Step Summary integration
-- Zero-commit model/provider switching via GitHub Repository Variables
-- Automatic PR number detection from GitHub event payload
-- Dependabot/bot PR detection — skips review gracefully without failing CI
-- Dual diff strategy: local `git diff` with GitHub Pulls API fallback
-- Zod v4 schema validation for all inline suggestions (coerces string line numbers)
-- Node 24 LTS runtime, TypeScript 7.0, zero-dependency bundle via esbuild (<1MB)
-- AGPL-3.0 open-source license
-- Self-dogfooding: ReviewGround reviews its own PRs in CI
 
 [Unreleased]: https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/arungupta1526/ReviewGround/releases/tag/v1.0.0
