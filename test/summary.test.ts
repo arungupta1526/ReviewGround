@@ -4,6 +4,7 @@ import {
   formatDuration,
   getStatusBadge,
   buildCiSummaryMarkdown,
+  hasCiData,
 } from '../src/summary.js';
 
 describe('CI Summary & Duration Tracking', () => {
@@ -55,5 +56,24 @@ describe('CI Summary & Duration Tracking', () => {
     );
 
     assert.ok(md.includes('❌ **CI Pipeline failed at: Dependency Audit.**'));
+  });
+
+  it('correctly determines whether CI data exists via hasCiData', () => {
+    // Empty / unknown / missing inputs should return false
+    assert.strictEqual(hasCiData('', '', '', '', '', {}), false);
+    assert.strictEqual(hasCiData('unknown', 'unknown', 'unknown', 'unknown', '', {}), false);
+    assert.strictEqual(hasCiData(undefined, undefined, undefined, undefined, undefined, {}), false);
+
+    // Any valid stage input should return true
+    assert.strictEqual(hasCiData('success', 'unknown', 'unknown', 'unknown', '', {}), true);
+    assert.strictEqual(hasCiData('unknown', 'failure', 'unknown', 'unknown', '', {}), true);
+    assert.strictEqual(hasCiData('unknown', 'unknown', 'success', 'unknown', '', {}), true);
+    assert.strictEqual(hasCiData('unknown', 'unknown', 'unknown', 'cancelled', '', {}), true);
+
+    // Extra stages should return true
+    assert.strictEqual(hasCiData('', '', '', '', '[{"name":"Deploy","result":"success"}]', {}), true);
+
+    // Detected job durations should return true even if inputs are missing
+    assert.strictEqual(hasCiData('', '', '', '', '', { build: '10s' }), true);
   });
 });

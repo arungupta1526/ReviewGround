@@ -119,7 +119,19 @@ ReviewGround features **Smart Mismatch Auto-Routing**:
 
 ---
 
-## ⚡ Quickstart Workflows
+## ⚡ Execution Modes (`mode`)
+
+ReviewGround operates in three execution modes configured via the `mode` input (`mode: review | summary | all`):
+
+| Mode | Intended Use | Behavior |
+|---|---|---|
+| **`mode: review`** *(Recommended for Code Review)* | **AI Code Review Only** | Runs universal multi-provider AI review, live npm package registry grounding, and 1-click interactive diff suggestions. **Post-CI verification table is completely suppressed.** |
+| **`mode: summary`** | **Post-CI Verification Only** | Queries GitHub Actions Workflow Jobs API to render duration metrics (`14s`, `1m 20s`) and status badges for Gitleaks, Dependency Audit, Build, Unit Tests, and custom stages. |
+| **`mode: all`** *(Default)* | **Unified Review & CI Verification** | Runs AI review first, then appends the CI verification summary to the single sticky comment. Features **Smart CI Auto-Skip**: If no CI stages (`gitleaks-result`, `build-result`, etc.) or matching workflow jobs are detected, the CI table is **automatically omitted** to prevent noisy `unknown` status rows. |
+
+---
+
+## 🚀 Quickstart Workflows
 
 Create `.github/workflows/reviewground.yml` in your project:
 
@@ -147,6 +159,9 @@ jobs:
           fetch-depth: 0 # Required for full git diff calculation
 
       - uses: arungupta1526/ReviewGround@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: review
         env:
           # API Keys (Stored in Repository Secrets)
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -158,8 +173,6 @@ jobs:
           # Zero-Commit Dynamic Controls (Configured in Repository Variables)
           PROVIDER: ${{ vars.PROVIDER || '' }}
           MODEL: ${{ vars.MODEL || '' }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ---
@@ -189,6 +202,7 @@ jobs:
       - uses: arungupta1526/ReviewGround@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: review
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
@@ -219,6 +233,7 @@ jobs:
       - uses: arungupta1526/ReviewGround@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: review
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           model: 'qwen/qwen-2.5-coder-32b-instruct' # Or any model on OpenRouter!
 ```
@@ -250,10 +265,62 @@ jobs:
       - uses: arungupta1526/ReviewGround@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: review
           provider: 'custom'
           llm-base-url: 'http://localhost:11434/v1' # Or https://api.together.xyz/v1
           llm-api-key: ${{ secrets.LLM_API_KEY }}
           model: 'llama3.2'
+```
+
+---
+
+### Option 5: Full End-to-End CI Pipeline with Verification Summary (`mode: all`)
+
+Combine AI code review with automated stage verification in a multi-job workflow:
+
+```yaml
+name: CI Pipeline & AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Secret Scan
+        run: echo "Gitleaks scan complete"
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm ci && npm test && npm run build
+
+  reviewground:
+    needs: [gitleaks, build-and-test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: arungupta1526/ReviewGround@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: all
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          gitleaks-result: ${{ needs.gitleaks.result }}
+          build-result: ${{ needs.build-and-test.result }}
+          test-result: ${{ needs.build-and-test.result }}
 ```
 
 ---
@@ -489,6 +556,17 @@ steps:
       mode: 'summary'
       extra-stages: '[{"name":"E2E Cypress","result":"success"},{"name":"Staging Deploy","result":"success"}]'
 ```
+
+### 5. Smart CI Verification Auto-Skip
+In `mode: all` (default mode), ReviewGround automatically cross-checks if any CI stage inputs (`gitleaks-result`, `audit-result`, `build-result`, `test-result`, `extra-stages`) or matching workflow jobs were detected:
+- If none exist, the Post-CI verification table is **smartly skipped** so your PR comments remain clean and focused solely on code review without noisy `unknown` status rows.
+- When CI stages are supplied, ReviewGround appends the complete verification table and duration metrics in the same sticky PR comment.
+
+### 6. Actionable Missing-Key Guidance & Diagnostic Notices
+Never guess why an AI review didn't trigger:
+- **No Keys Configured**: When a pull request runs without any AI API key in repository secrets, ReviewGround posts an interactive setup banner on the PR with direct links to free keys (Google AI Studio, Groq Console, OpenRouter).
+- **Graceful Bot PR Skipping**: Automated bots (e.g. `dependabot[bot]`) are detected and skipped silently without failing CI runs or posting noise.
+- **Provider Failure Diagnostics**: If all configured AI providers fail due to quota exhaustion or upstream rate limits, ReviewGround posts a diagnostic notice with direct links to the GitHub Actions run logs.
 
 ---
 

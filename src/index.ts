@@ -74,6 +74,7 @@ async function run(): Promise<void> {
       repo,
       prNumber,
       commentTag: getOptionalInput('comment-tag', ['REVIEWGROUND_COMMENT_TAG', 'COMMENT_TAG']) || undefined,
+      runId: getOptionalInput('run-id', ['GITHUB_RUN_ID', 'RUN_ID']) || undefined,
     };
 
     // Mode: review or all
@@ -130,7 +131,7 @@ async function run(): Promise<void> {
     if (mode === 'summary' || mode === 'all' || mode === 'both') {
       const summaryConfig: SummaryConfig = {
         ...baseConfig,
-        runId: getOptionalInput('run-id', ['GITHUB_RUN_ID', 'RUN_ID']) || undefined,
+        mode,
         gitleaksResult: getOptionalInput('gitleaks-result', ['GITLEAKS_RESULT']) || undefined,
         auditResult: getOptionalInput('audit-result', ['AUDIT_RESULT']) || undefined,
         buildResult: getOptionalInput('build-result', ['BUILD_RESULT']) || undefined,
@@ -140,8 +141,13 @@ async function run(): Promise<void> {
 
       console.log('\n--- 📊 Starting Post-CI Summary ---');
       const summaryMarkdown = await runSummary(summaryConfig);
-      core.setOutput('summarized', 'true');
-      core.setOutput('summary-markdown', summaryMarkdown);
+      if (summaryMarkdown && summaryMarkdown.length > 0) {
+        core.setOutput('summarized', 'true');
+        core.setOutput('summary-markdown', summaryMarkdown);
+      } else {
+        core.setOutput('summarized', 'false');
+        core.setOutput('summary-markdown', '');
+      }
     }
 
     console.log('\n✨ ReviewGround completed successfully.');

@@ -40172,6 +40172,29 @@ async function runReview(config2 = {}) {
   const configuredProviders = providerManager.getConfiguredProviders();
   if (configuredProviders.length === 0) {
     console.log("\u2139\uFE0F  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.");
+    if (token && repo && prNumber) {
+      const noKeyNotice = `## \u{1F6E1}\uFE0F ReviewGround AI Code Review
+
+> [!IMPORTANT]
+> **No AI Provider API Key Configured**
+>
+> ReviewGround was unable to run an AI code review on this pull request because no LLM API key was detected in your repository secrets or environment variables.
+>
+> ### \u{1F511} How to Activate AI Reviews (1-Minute Setup):
+> 1. In this repository, navigate to **Settings \u2794 Secrets and variables \u2794 Actions**.
+> 2. Click **New repository secret** and add your preferred provider key:
+>    - **\`GEMINI_API_KEY\`** \u2014 Free tier available at [Google AI Studio](https://aistudio.google.com/app/apikey) *(Recommended)*
+>    - **\`GROQ_API_KEY\`** \u2014 Ultra-fast LPU inference at [Groq Console](https://console.groq.com/keys) *(Free tier)*
+>    - **\`OPENROUTER_API_KEY\`** \u2014 15+ free models at [OpenRouter](https://openrouter.ai/keys)
+>    - **\`OPENAI_API_KEY\`**, **\`ANTHROPIC_API_KEY\`**, or **\`DEEPSEEK_API_KEY\`**
+> 3. Once added, re-run this workflow or push a new commit to start receiving automated AI code reviews!
+>
+> *(Note: If you only intended to post CI verification summaries, configure \`mode: summary\` in your workflow).*
+
+---
+*Powered by [ReviewGround](https://github.com/reviewground/reviewground)*`;
+      await postOrUpdatePrComment(noKeyNotice, token, repo, prNumber, commentTag);
+    }
     return null;
   }
   const rawDiff = await getPullRequestDiff(repo, prNumber, token, config2.baseBranch || "main");
@@ -40348,6 +40371,25 @@ ${truncatedDiff}
   const response = await providerManager.executeReview(prompt, reviewOptions);
   if (!response) {
     console.warn("\u26A0\uFE0F Review execution returned no result.");
+    if (token && repo && prNumber) {
+      const runId = config2.runId || process.env.GITHUB_RUN_ID;
+      const runUrl = runId && repo ? `https://github.com/${repo}/actions/runs/${runId}` : "";
+      const runLink = runUrl ? `[View GitHub Actions Run Logs](${runUrl})` : "check the GitHub Actions workflow logs";
+      const errorNotice = `## \u{1F916} AI Code Review Notice
+
+> [!WARNING]
+> **AI Review Generation Failed**
+>
+> ReviewGround attempted to analyze this pull request, but all configured AI providers failed to return a valid response (e.g. API rate limit, quota exhaustion, network timeout, or invalid credentials).
+>
+> - **Attempted Provider(s):** ${configuredProviders.map((p) => p.name).join(", ")}
+> - Please ${runLink} for detailed error output.
+> - Verify your API key quotas or consider configuring a fallback provider (e.g. \`GROQ_API_KEY\`, \`OPENROUTER_API_KEY\`, or \`GEMINI_API_KEY\`).
+
+---
+*Powered by [ReviewGround](https://github.com/reviewground/reviewground)*`;
+      await postOrUpdatePrComment(errorNotice, token, repo, prNumber, commentTag);
+    }
     return null;
   }
   let cleanReviewText = response.text;
@@ -40532,6 +40574,13 @@ function formatDuration(ms) {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+}
+function hasCiData(gitleaks, audit, build, test, extraStages, durations = {}) {
+  const hasInputs = Boolean(
+    gitleaks && gitleaks !== "unknown" && gitleaks.trim().length > 0 || audit && audit !== "unknown" && audit.trim().length > 0 || build && build !== "unknown" && build.trim().length > 0 || test && test !== "unknown" && test.trim().length > 0 || extraStages && extraStages.trim().length > 0
+  );
+  const hasJobDurations = Object.keys(durations).length > 0;
+  return hasInputs || hasJobDurations;
 }
 async function fetchStageDurations(repo, runId, token) {
   const durations = {};
@@ -40732,16 +40781,33 @@ async function runSummary(config2 = {}) {
   const prNumber = (config2.prNumber || process.env.PR_NUMBER || "").trim();
   const runId = (config2.runId || process.env.RUN_ID || process.env.GITHUB_RUN_ID || "").trim();
   const commentTag = config2.commentTag || DEFAULT_COMMENT_TAG;
-  const gitleaks = (config2.gitleaksResult || process.env.GITLEAKS_RESULT || "unknown").trim();
-  const audit = (config2.auditResult || process.env.AUDIT_RESULT || "unknown").trim();
-  const build = (config2.buildResult || process.env.BUILD_RESULT || "unknown").trim();
-  const test = (config2.testResult || process.env.TEST_RESULT || "unknown").trim();
+  const gitleaksRaw = (config2.gitleaksResult || process.env.GITLEAKS_RESULT || "").trim();
+  const auditRaw = (config2.auditResult || process.env.AUDIT_RESULT || "").trim();
+  const buildRaw = (config2.buildResult || process.env.BUILD_RESULT || "").trim();
+  const testRaw = (config2.testResult || process.env.TEST_RESULT || "").trim();
+  const extraStagesRaw = (config2.extraStages || process.env.REVIEWGROUND_EXTRA_STAGES || process.env.EXTRA_STAGES || "").trim();
+  const durations = await fetchStageDurations(repo, runId, token);
+  const hasData = hasCiData(
+    gitleaksRaw,
+    auditRaw,
+    buildRaw,
+    testRaw,
+    extraStagesRaw,
+    durations
+  );
+  if (!hasData && config2.mode !== "summary") {
+    console.log(`\u2139\uFE0F  [ReviewGround] No CI verification stage inputs (gitleaks-result, audit-result, build-result, test-result) or matching jobs detected. Smart skipping Post-CI summary table in '${config2.mode || "all"}' mode.`);
+    return "";
+  }
+  const gitleaks = gitleaksRaw || "unknown";
+  const audit = auditRaw || "unknown";
+  const build = buildRaw || "unknown";
+  const test = testRaw || "unknown";
   console.log("\u{1F4CA} [ReviewGround] Generating Post-CI Summary...");
   console.log(`- Gitleaks Result: ${gitleaks}`);
   console.log(`- Dependency Audit Result: ${audit}`);
   console.log(`- Build Result: ${build}`);
   console.log(`- Test Result: ${test}`);
-  const durations = await fetchStageDurations(repo, runId, token);
   console.log("- Stage Durations:", JSON.stringify(durations));
   const summaryMarkdown = buildCiSummaryMarkdown(
     gitleaks,
@@ -40751,7 +40817,7 @@ async function runSummary(config2 = {}) {
     durations,
     runId,
     repo,
-    config2.extraStages
+    extraStagesRaw || void 0
   );
   console.log("\n================== \u{1F6A6} CI SUMMARY ==================\n");
   console.log(summaryMarkdown);
@@ -40824,7 +40890,8 @@ async function run() {
       githubToken: token,
       repo,
       prNumber,
-      commentTag: getOptionalInput("comment-tag", ["REVIEWGROUND_COMMENT_TAG", "COMMENT_TAG"]) || void 0
+      commentTag: getOptionalInput("comment-tag", ["REVIEWGROUND_COMMENT_TAG", "COMMENT_TAG"]) || void 0,
+      runId: getOptionalInput("run-id", ["GITHUB_RUN_ID", "RUN_ID"]) || void 0
     };
     if (mode === "review" || mode === "all" || mode === "both") {
       const reviewConfig = {
@@ -40871,7 +40938,7 @@ async function run() {
     if (mode === "summary" || mode === "all" || mode === "both") {
       const summaryConfig = {
         ...baseConfig,
-        runId: getOptionalInput("run-id", ["GITHUB_RUN_ID", "RUN_ID"]) || void 0,
+        mode,
         gitleaksResult: getOptionalInput("gitleaks-result", ["GITLEAKS_RESULT"]) || void 0,
         auditResult: getOptionalInput("audit-result", ["AUDIT_RESULT"]) || void 0,
         buildResult: getOptionalInput("build-result", ["BUILD_RESULT"]) || void 0,
@@ -40880,8 +40947,13 @@ async function run() {
       };
       console.log("\n--- \u{1F4CA} Starting Post-CI Summary ---");
       const summaryMarkdown = await runSummary(summaryConfig);
-      setOutput("summarized", "true");
-      setOutput("summary-markdown", summaryMarkdown);
+      if (summaryMarkdown && summaryMarkdown.length > 0) {
+        setOutput("summarized", "true");
+        setOutput("summary-markdown", summaryMarkdown);
+      } else {
+        setOutput("summarized", "false");
+        setOutput("summary-markdown", "");
+      }
     }
     console.log("\n\u2728 ReviewGround completed successfully.");
   } catch (error63) {

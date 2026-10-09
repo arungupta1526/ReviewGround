@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hasCiData()` & Smart CI Verification Auto-Skip — In `mode: all` (default), automatically suppresses the Post-CI verification table if no CI stage results (`gitleaks-result`, `audit-result`, `build-result`, `test-result`, `extra-stages`) or matching workflow jobs are detected, eliminating noisy `unknown` status rows
+- Actionable missing-key setup guidance PR comments — When a pull request runs without any configured LLM API keys, ReviewGround posts a clean, interactive setup banner on the PR with direct links to free provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`)
+- Diagnostic failure notifications on PR comments — When all configured AI providers fail due to quota exhaustion, rate limits, or network timeouts, posts a diagnostic notice linking to GitHub Actions run logs
 - `review-language` input — outputs AI review in any language (`ja`, `es`, `de`, `zh`, `pt`, `fr`, or any BCP-47 code, default `en`)
 - `enable-pr-description-update` input — auto-appends 🟢/🟡/🔴 risk badge + AI summary to PR body (opt-in, default `false`)
 - `enable-check-run` input — creates a GitHub Check Run pass/fail gate usable in branch protection rules; requires `checks: write` permission (opt-in, default `false`)
@@ -46,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Marketplace Description Limit**: Shortened `action.yml` description to 114 characters to comply with GitHub Marketplace's strict 125-character maximum requirement
 
 ### Changed
+- Prominently documented execution modes (`mode: review`, `mode: summary`, `mode: all`) in `README.md` and defaulted Quickstart workflow examples to `mode: review`
+- Updated `action.yml` description for `mode` input to document Smart CI Verification Auto-Skip
 - Review prompt is now dynamically generated based on `review-level` — reduces noise in `critical` mode
 - All 7 provider adapters now use shared `fetchWithRetry` instead of raw `fetch` + `AbortSignal.timeout` — adds automatic retry resilience with no behavior change for the happy path
 - `AGENTS.md` rule #7 added: mandatory CHANGELOG.md update required after every code change

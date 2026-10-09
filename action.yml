@@ -12,7 +12,7 @@ inputs:
     default: '${{ github.token }}'
 
   mode:
-    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), or "all" (both)'
+    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), or "all" (both, with smart CI table auto-skip when no stage inputs provided)'
     required: false
     default: 'all'
 

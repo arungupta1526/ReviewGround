@@ -22,6 +22,8 @@ export interface SummaryConfig {
    * JSON string: [{"name":"Deploy","result":"success"},{"name":"E2E","result":"failure"}]
    */
   extraStages?: string;
+  /** Execution mode ('review' | 'summary' | 'all') */
+  mode?: string;
 }
 
 export interface StageDurations {
@@ -50,6 +52,29 @@ export function formatDuration(ms: number): string {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
+/**
+ * Determines whether any CI verification stage inputs or workflow jobs exist.
+ * Used for smart auto-skipping empty "unknown" CI tables when ReviewGround runs in 'all' mode.
+ */
+export function hasCiData(
+  gitleaks?: string,
+  audit?: string,
+  build?: string,
+  test?: string,
+  extraStages?: string,
+  durations: StageDurations = {}
+): boolean {
+  const hasInputs = Boolean(
+    (gitleaks && gitleaks !== 'unknown' && gitleaks.trim().length > 0) ||
+    (audit && audit !== 'unknown' && audit.trim().length > 0) ||
+    (build && build !== 'unknown' && build.trim().length > 0) ||
+    (test && test !== 'unknown' && test.trim().length > 0) ||
+    (extraStages && extraStages.trim().length > 0)
+  );
+  const hasJobDurations = Object.keys(durations).length > 0;
+  return hasInputs || hasJobDurations;
 }
 
 /**
@@ -307,18 +332,38 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   const runId = (config.runId || process.env.RUN_ID || process.env.GITHUB_RUN_ID || '').trim();
   const commentTag = config.commentTag || DEFAULT_COMMENT_TAG;
 
-  const gitleaks = (config.gitleaksResult || process.env.GITLEAKS_RESULT || 'unknown').trim();
-  const audit = (config.auditResult || process.env.AUDIT_RESULT || 'unknown').trim();
-  const build = (config.buildResult || process.env.BUILD_RESULT || 'unknown').trim();
-  const test = (config.testResult || process.env.TEST_RESULT || 'unknown').trim();
+  const gitleaksRaw = (config.gitleaksResult || process.env.GITLEAKS_RESULT || '').trim();
+  const auditRaw = (config.auditResult || process.env.AUDIT_RESULT || '').trim();
+  const buildRaw = (config.buildResult || process.env.BUILD_RESULT || '').trim();
+  const testRaw = (config.testResult || process.env.TEST_RESULT || '').trim();
+  const extraStagesRaw = (config.extraStages || process.env.REVIEWGROUND_EXTRA_STAGES || process.env.EXTRA_STAGES || '').trim();
+
+  const durations = await fetchStageDurations(repo, runId, token);
+
+  const hasData = hasCiData(
+    gitleaksRaw,
+    auditRaw,
+    buildRaw,
+    testRaw,
+    extraStagesRaw,
+    durations
+  );
+
+  if (!hasData && config.mode !== 'summary') {
+    console.log(`ℹ️  [ReviewGround] No CI verification stage inputs (gitleaks-result, audit-result, build-result, test-result) or matching jobs detected. Smart skipping Post-CI summary table in '${config.mode || 'all'}' mode.`);
+    return '';
+  }
+
+  const gitleaks = gitleaksRaw || 'unknown';
+  const audit = auditRaw || 'unknown';
+  const build = buildRaw || 'unknown';
+  const test = testRaw || 'unknown';
 
   console.log('📊 [ReviewGround] Generating Post-CI Summary...');
   console.log(`- Gitleaks Result: ${gitleaks}`);
   console.log(`- Dependency Audit Result: ${audit}`);
   console.log(`- Build Result: ${build}`);
   console.log(`- Test Result: ${test}`);
-
-  const durations = await fetchStageDurations(repo, runId, token);
   console.log('- Stage Durations:', JSON.stringify(durations));
 
   const summaryMarkdown = buildCiSummaryMarkdown(
@@ -329,7 +374,7 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
     durations,
     runId,
     repo,
-    config.extraStages
+    extraStagesRaw || undefined
   );
 
   // 1. Output to console
