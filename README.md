@@ -334,6 +334,80 @@ jobs:
 
 ---
 
+### Option 6: Complete Exhaustive Configuration (All Inputs with Defaults & Comments)
+
+For enterprise teams and advanced workflows, here is a complete reference configuration showcasing every single available input, its default value, and descriptive comments:
+
+```yaml
+name: ReviewGround Full Enterprise Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+  checks: write               # Required if enable-check-run is set to 'true'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0      # Required for git diff calculation
+
+      - uses: arungupta1526/ReviewGround@v1
+        with:
+          # --- Core Execution & Git Controls ---
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'all'                             # 'review' (AI only) | 'summary' (CI table only) | 'all' (both, default: 'all')
+          base-branch: 'main'                     # Target branch for diff calculation (default: 'main')
+
+          # --- AI Review Depth & Customization ---
+          review-level: 'standard'               # 'critical' (security/bugs only) | 'standard' (default) | 'comprehensive' (all + style)
+          review-language: 'en'                  # Review language e.g. 'en', 'ja', 'es', 'de', 'zh', 'hi' (default: 'en')
+          temperature: '0.2'                     # Sampling temperature 0.0–1.0 (default: '0.2')
+          max-tokens: '2048'                     # Maximum response token length (default: '2048')
+          ignore-patterns: ''                    # Comma-separated globs to exclude e.g. 'dist/**,*.min.js' (default: none)
+
+          # --- Grounding & Suggestions (Auto-Enabled by Default) ---
+          enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons (default: 'true')
+          enable-search-grounding: 'true'        # Google Search tool grounding for Gemini (default: 'true')
+          enable-npm-verify: 'true'              # Live registry.npmjs.org check to eliminate fake versions (default: 'true')
+
+          # --- Enterprise Merge Gates & Badges (Opt-In) ---
+          enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & summary to PR body (default: 'false')
+          enable-check-run: 'false'              # Create blocking pass/fail GitHub Check Run gate (default: 'false')
+
+          # --- Multi-Provider Overrides (Optional) ---
+          provider: ''                           # Force specific provider: 'gemini' | 'groq' | 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'custom'
+          model: ''                              # Force specific model override e.g. 'deepseek-chat', 'gpt-4o'
+          fallback-models: ''                    # Custom comma-separated failover models (default: built-in chain)
+
+          # --- Post-CI Status Verification (Optional Stage Inputs) ---
+          gitleaks-result: ''                    # e.g. ${{ needs.gitleaks.result }} (auto-discovered via API if omitted)
+          audit-result: ''                       # e.g. ${{ needs.security-audit.result }} (auto-discovered via API if omitted)
+          build-result: ''                       # e.g. ${{ needs.build.result }} (auto-discovered via API if omitted)
+          test-result: ''                        # e.g. ${{ needs.test.result }} (auto-discovered via API if omitted)
+          extra-stages: ''                       # Extra JSON stages e.g. '[{"name":"Deploy","result":"success"}]'
+        env:
+          # --- BYOK Provider API Keys (Set any one or multiple in GitHub Secrets) ---
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}         # For self-hosted endpoints (e.g. Ollama/vLLM)
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}           # API key for custom endpoint
+```
+
+---
+
+
 ## 🏗️ End-to-End Architecture & Workflow
 
 ```mermaid
@@ -357,7 +431,9 @@ flowchart TD
     subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
         RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
-        DETECT{"Auto-Detect Provider Priority<br/>Gemini ➔ OpenAI ➔ Claude ➔ Groq ➔ DeepSeek ➔ OpenRouter"}:::config
+        DETECT{"Auto-Detect Provider Priority<br/>Gemini ➔ OpenAI ➔ Claude ➔ Groq ➔ DeepSeek ➔ OpenRouter ➔ Custom"}:::config
+        KEYS_CHECK{"Any LLM Key Configured?<br/>(Secrets or Env)"}:::safety
+        SETUP_NOTICE["Post Interactive Missing Key Setup Guide<br/>(1-Minute Setup Banner + Free Key Links)"]:::output
     end
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
@@ -369,6 +445,7 @@ flowchart TD
         CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
         FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
         CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3–4 Built-In Models)"]:::llm
+        DIAGNOSTIC_NOTICE["Post Diagnostic Failure Notice<br/>(Links to Actions Run Logs)"]:::safety
         ZOD["Zod 4.6.5 Validation & Line Number Coercion<br/>(InlineSuggestionsListSchema)"]:::zod
     end
 
@@ -378,9 +455,11 @@ flowchart TD
         PR_DESC["Auto-Update PR Description<br/>Prepends 🟢/🟡/🔴 Risk Badge & Summary"]:::output
     end
 
-    subgraph SUMMARY_FLOW["5. Post-CI Pipeline Sticky Summary"]
-        JOB_API["Query GitHub Actions Jobs API<br/>(/actions/runs/{run_id}/jobs)"]:::summary
-        DURATIONS["Calculate Stage Durations + Extra Stages<br/>(Gitleaks, Audit, Build, Test, Deploy...)"]:::summary
+    subgraph SUMMARY_FLOW["5. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
+        CI_CHECK{"Any CI Data or Jobs Detected?<br/>hasCiData()"}:::summary
+        SKIP_CI["Smart Auto-Skip Empty CI Table<br/>(Keeps PR Comments Clean)"]:::safety
+        JOB_API["Dynamic Job Auto-Discovery<br/>(Query GitHub API: /actions/runs/{run_id}/jobs)"]:::summary
+        DURATIONS["Calculate Real Stage Durations + Extra Stages<br/>(Gitleaks, Audit, Build, Test, Deploy...)"]:::summary
         STICKY_FIND{"Previous Review Sticky Comment Found?<br/>(&lt;!-- reviewground-code-review --&gt;)"}:::summary
         UPDATE["PATCH Existing Comment (In-Place Update)"]:::output
         CREATE["POST New Sticky Comment"]:::output
@@ -392,7 +471,9 @@ flowchart TD
     BOT -- "No" --> PARSE
     PARSE --> RULES
     RULES --> DETECT
-    DETECT --> DIFF
+    DETECT --> KEYS_CHECK
+    KEYS_CHECK -- "No Keys" --> SETUP_NOTICE
+    KEYS_CHECK -- "Keys Found" --> DIFF
     DIFF --> NPM
     NPM --> SEARCH
     SEARCH --> PROMPT
@@ -401,13 +482,16 @@ flowchart TD
     RETRY --> FALLBACK_CHECK
     FALLBACK_CHECK -- "Failed / 429" --> CALL_FALLBACK
     FALLBACK_CHECK -- "Success" --> ZOD
-    CALL_FALLBACK --> ZOD
+    CALL_FALLBACK -- "All Failed" --> DIAGNOSTIC_NOTICE
+    CALL_FALLBACK -- "Fallback Succeeded" --> ZOD
     ZOD --> COMMENT_INLINE
     ZOD --> CHECK_RUN
     ZOD --> PR_DESC
 
     %% CI Summary Flow Trigger
-    DETECT -. "mode: summary or all" .-> JOB_API
+    DETECT -. "mode: summary or all" .-> CI_CHECK
+    CI_CHECK -- "No CI Data" --> SKIP_CI
+    CI_CHECK -- "Jobs / Stages Present" --> JOB_API
     JOB_API --> DURATIONS
     DURATIONS --> STICKY_FIND
     STICKY_FIND -- "Found" --> UPDATE
@@ -536,7 +620,7 @@ steps:
 ```
 
 ### 2. PR Description Auto-Update with Risk Badge
-Automatically prepend a risk level badge (🟢 Low / 🟡 Moderate / 🔴 High Risk) and executive summary to the pull request's initial description:
+Automatically append a risk level badge (🟢 Low / 🟡 Moderate / 🔴 High Risk) and executive summary below the pull request author's initial description:
 
 ```yaml
 steps:
