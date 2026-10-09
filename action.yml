@@ -1,5 +1,5 @@
 name: 'ReviewGround - AI Code Reviewer & CI Verification'
-description: 'Universal AI Code Reviewer with multi-provider BYOK (Gemini, OpenAI, Claude, Groq, DeepSeek), 1-click commit suggestions, live npm registry grounding, and sticky CI summaries.'
+description: 'Universal AI Code Reviewer with 7-provider BYOK, live npm grounding, 1-click suggestions, and sticky CI summaries.'
 author: 'ReviewGround'
 branding:
   icon: 'shield'
