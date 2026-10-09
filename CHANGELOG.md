@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bug #6**: Inline suggestion cap of 5 was applied silently — now logs count vs cap clearly
 - **Action Parser Fix**: Removed embedded `${{ needs... }}` expressions from `action.yml` input descriptions which caused GitHub Actions workflow runner crashes
 - **Bot PR Safety**: Early detection and graceful skip of automated bot PRs (e.g. `dependabot[bot]`) before provider initialization
+- **Marketplace Description Limit**: Shortened `action.yml` description to 114 characters to comply with GitHub Marketplace's strict 125-character maximum requirement
 
 ### Changed
 - Review prompt is now dynamically generated based on `review-level` — reduces noise in `critical` mode
