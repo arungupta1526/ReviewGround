@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 export class GroqProvider implements LLMProvider {
   readonly id = 'groq' as const;
@@ -30,11 +31,16 @@ export class GroqProvider implements LLMProvider {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     const safePrompt =
       prompt.length > 16000
-        ? prompt.slice(0, 16000) + '\n\n...[diff truncated for Groq token limit]'
+        ? (() => {
+            console.warn(
+              `⚠️ [ReviewGround] Groq: diff is large (${prompt.length} chars). Truncating to 16,000 chars for Groq token limit. Large PRs may produce an incomplete review.`
+            );
+            return prompt.slice(0, 16000) + '\n\n...[diff truncated for Groq context window limit]';
+          })()
         : prompt;
 
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -55,7 +61,6 @@ export class GroqProvider implements LLMProvider {
           temperature,
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(25000),
       });
 
       if (!res.ok) {

@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 export class OpenRouterProvider implements LLMProvider {
   readonly id = 'openrouter' as const;
@@ -31,7 +32,7 @@ export class OpenRouterProvider implements LLMProvider {
   ): Promise<string | null> {
     const url = `${this.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -54,8 +55,7 @@ export class OpenRouterProvider implements LLMProvider {
           temperature,
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(35000),
-      });
+      }, 2, 35000);
 
       if (!res.ok) {
         const errText = await res.text();

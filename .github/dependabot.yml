@@ -13,11 +13,35 @@ updates:
       time: "09:00"
       timezone: "Asia/Kolkata"
     open-pull-requests-limit: 5
-    # Group updates together to prevent PR spam
+    # Group updates logically and separate safe minor/patch from risky major upgrades
     groups:
-      dependencies:
+      # 1. Development tooling and type definitions
+      development-tooling:
+        dependency-type: "development"
+        patterns:
+          - "typescript*"
+          - "tsx*"
+          - "esbuild*"
+          - "@types/*"
+
+      # 2. Production dependencies: only safe minor and patch updates
+      production-dependencies:
+        dependency-type: "production"
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+    # Ignore breaking major upgrades that exceed active Node 24 LTS and Actions Core baseline
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@actions/core"
+        update-types:
+          - "version-update:semver-major"
+
     labels:
       - "dependencies"
       - "security"

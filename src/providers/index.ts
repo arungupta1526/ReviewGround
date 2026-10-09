@@ -36,7 +36,7 @@ export function detectProviderFromModel(modelName?: string): ProviderName | null
   const lower = modelName.trim().toLowerCase();
 
   if (lower.startsWith('gemini')) return 'gemini';
-  if (lower.startsWith('gpt-') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('chatgpt')) return 'openai';
+  if (lower.startsWith('gpt-') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4') || lower.startsWith('chatgpt')) return 'openai';
   if (lower.startsWith('claude')) return 'anthropic';
   if (lower === 'qwen/qwen3.8-27b' || lower.startsWith('openai/gpt-oss')) return 'groq';
   if (lower.startsWith('deepseek') && !lower.includes('/')) return 'deepseek';

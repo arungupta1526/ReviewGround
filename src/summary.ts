@@ -18,6 +18,10 @@ export interface SummaryConfig {
   buildResult?: string;
   testResult?: string;
   commentTag?: string;
+  /** Optional extra CI stages beyond the default 4.
+   * JSON string: [{"name":"Deploy","result":"success"},{"name":"E2E","result":"failure"}]
+   */
+  extraStages?: string;
 }
 
 export interface StageDurations {
@@ -123,7 +127,8 @@ export function buildCiSummaryMarkdown(
   test: string,
   durations: StageDurations,
   runId?: string,
-  repo?: string
+  repo?: string,
+  extraStagesJson?: string
 ): string {
   const gBadge = getStatusBadge(gitleaks);
   const aBadge = getStatusBadge(audit);
@@ -168,6 +173,25 @@ export function buildCiSummaryMarkdown(
     verdict = `⚠️ **CI finished with status: Gitleaks (${gitleaks}), Audit (${audit}), Build (${build}), Tests (${test}).** ${runLinkText}`;
   }
 
+  // Parse optional extra stages from JSON string
+  interface ExtraStage { name: string; result: string; }
+  let extraRows = '';
+  if (extraStagesJson) {
+    try {
+      const parsed = JSON.parse(extraStagesJson) as ExtraStage[];
+      if (Array.isArray(parsed)) {
+        parsed.forEach((stage, idx) => {
+          const badge = getStatusBadge(stage.result);
+          const key = `extra_${stage.name.toLowerCase().replace(/\s+/g, '_')}`;
+          const dur = durations[key] ? `\`${durations[key]}\`` : '—';
+          extraRows += `\n| 🔹 **${4 + idx + 1}. ${stage.name}** | ${badge.icon} ${badge.text} | ${dur} | Custom CI stage |`;
+        });
+      }
+    } catch {
+      console.warn('⚠️ [ReviewGround] Could not parse extra-stages JSON — skipping extra rows.');
+    }
+  }
+
   return `${CI_SECTION_HEADER}
 
 | Pipeline Stage | Status | Duration | Verification Summary |
@@ -175,7 +199,7 @@ export function buildCiSummaryMarkdown(
 | 🐍 **1. Gitleaks Secret Scan** | ${gBadge.icon} ${gBadge.text} | ${gDur} | Secret, token & credential leak detection |
 | 🐍 **2. Dependency Audit** | ${aBadge.icon} ${aBadge.text} | ${aDur} | Security vulnerability & zero-CVE audit |
 | 🐍 **3. Build & Compilation** | ${bBadge.icon} ${bBadge.text} | ${bDur} | Clean build compilation & type safety |
-| 🐍 **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |
+| 🐍 **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |${extraRows}
 
 ${verdict}`;
 }
@@ -199,18 +223,24 @@ export async function updateOrCreateStickyComment(
   };
 
   try {
-    const listRes = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`,
-      { headers }
-    );
-
-    if (!listRes.ok) {
-      console.warn(`⚠️ Could not list comments for PR #${prNumber}: HTTP ${listRes.status}`);
-      return;
+    // Paginate through all comment pages to find the sticky comment (handles PRs with >100 comments)
+    let existing: { id: number; body?: string } | undefined;
+    let page = 1;
+    while (!existing) {
+      const listRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
+        { headers }
+      );
+      if (!listRes.ok) {
+        console.warn(`⚠️ Could not list comments for PR #${prNumber}: HTTP ${listRes.status}`);
+        break;
+      }
+      const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
+      if (comments.length === 0) break;
+      existing = comments.find((c) => c.body?.includes(commentTag));
+      if (existing || comments.length < 100) break;
+      page++;
     }
-
-    const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
-    const existing = comments.find((c) => c.body?.includes(commentTag));
 
     if (existing && existing.body) {
       let updatedBody = existing.body;
@@ -298,7 +328,8 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
     test,
     durations,
     runId,
-    repo
+    repo,
+    config.extraStages
   );
 
   // 1. Output to console
@@ -306,10 +337,10 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   console.log(summaryMarkdown);
   console.log('====================================================\n');
 
-  // 2. Append to GitHub Actions Step Summary
+  // 2. Append to GitHub Actions Step Summary (async to avoid blocking event loop)
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummaryFile && fs.existsSync(stepSummaryFile)) {
-    fs.appendFileSync(stepSummaryFile, `\n\n${summaryMarkdown}\n`);
+    await fs.promises.appendFile(stepSummaryFile, `\n\n${summaryMarkdown}\n`);
     console.log('✅ CI Summary appended to GitHub Actions step summary.');
   }
 

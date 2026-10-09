@@ -278,26 +278,33 @@ flowchart TD
         SKIP["Graceful Skip (Preserves CI Build Green)"]:::safety
     end
 
-    subgraph CONFIG["2. Dynamic Config & Key Auto-Detection"]
+    subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
+        RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
         DETECT{"Auto-Detect Provider Priority<br/>Gemini ➔ OpenAI ➔ Claude ➔ Groq ➔ DeepSeek ➔ OpenRouter"}:::config
     end
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
-        DIFF["Extract PR Diff & Target Base Branch (main)"]:::config
+        DIFF["Extract Clean Hunk-Bounded PR Diff (main)"]:::config
         NPM["Live NPM Registry Check (registry.npmjs.org)<br/>Verifies Node 24, Zod 4, TS 7 releases"]:::grounding
         SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
-        PROMPT["Assemble Grounded Prompt + System Guardrails"]:::grounding
+        PROMPT["Assemble Grounded Prompt + System Guardrails<br/>(Provider Format: XML/Schema/Markdown + Language)"]:::grounding
+        RETRY["fetchWithRetry (Backoff + Jitter)"]:::llm
         CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
         FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
         CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3–4 Built-In Models)"]:::llm
         ZOD["Zod 4.6.5 Validation & Line Number Coercion<br/>(InlineSuggestionsListSchema)"]:::zod
-        COMMENT_INLINE["GitHub Pull Request Review Comments API<br/>1-Click '[ Apply suggestion ]' In Diff"]:::output
     end
 
-    subgraph SUMMARY_FLOW["4. Post-CI Pipeline Sticky Summary"]
+    subgraph GATES["4. Multi-Channel Outputs & Merge Gates"]
+        COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click '[ Apply suggestion ]' In Diff"]:::output
+        CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
+        PR_DESC["Auto-Update PR Description<br/>Prepends 🟢/🟡/🔴 Risk Badge & Summary"]:::output
+    end
+
+    subgraph SUMMARY_FLOW["5. Post-CI Pipeline Sticky Summary"]
         JOB_API["Query GitHub Actions Jobs API<br/>(/actions/runs/{run_id}/jobs)"]:::summary
-        DURATIONS["Calculate Exact Stage Durations<br/>(Gitleaks, Audit, Build, Test)"]:::summary
+        DURATIONS["Calculate Stage Durations + Extra Stages<br/>(Gitleaks, Audit, Build, Test, Deploy...)"]:::summary
         STICKY_FIND{"Previous Review Sticky Comment Found?<br/>(&lt;!-- reviewground-code-review --&gt;)"}:::summary
         UPDATE["PATCH Existing Comment (In-Place Update)"]:::output
         CREATE["POST New Sticky Comment"]:::output
@@ -307,17 +314,21 @@ flowchart TD
     PR --> BOT
     BOT -- "Yes" --> SKIP
     BOT -- "No" --> PARSE
-    PARSE --> DETECT
+    PARSE --> RULES
+    RULES --> DETECT
     DETECT --> DIFF
     DIFF --> NPM
     NPM --> SEARCH
     SEARCH --> PROMPT
     PROMPT --> CALL_PRIMARY
-    CALL_PRIMARY --> FALLBACK_CHECK
+    CALL_PRIMARY --> RETRY
+    RETRY --> FALLBACK_CHECK
     FALLBACK_CHECK -- "Failed / 429" --> CALL_FALLBACK
     FALLBACK_CHECK -- "Success" --> ZOD
     CALL_FALLBACK --> ZOD
     ZOD --> COMMENT_INLINE
+    ZOD --> CHECK_RUN
+    ZOD --> PR_DESC
 
     %% CI Summary Flow Trigger
     DETECT -. "mode: summary or all" .-> JOB_API
@@ -389,6 +400,14 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |
 | **Base Branch** | `base-branch` | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH` | `main` |
+| **LLM Temperature** | `temperature` | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE` | `0.2` |
+| **Max Tokens** | `max-tokens` | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS` | `2048` |
+| **Review Level** | `review-level` | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL` | `standard` (`critical` \| `standard` \| `comprehensive`) |
+| **Ignore Patterns** | `ignore-patterns` | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS` | — (comma-separated globs e.g. `dist/**,*.min.js`) |
+| **Review Language** | `review-language` | `REVIEWGROUND_REVIEW_LANGUAGE`, `REVIEW_LANGUAGE` | `en` (e.g. `ja`, `es`, `de`, `zh`, `pt`, `fr`) |
+| **PR Description Update** | `enable-pr-description-update` | `ENABLE_PR_DESCRIPTION_UPDATE` | `false` — auto-appends 🟢/🟡/🔴 risk badge to PR body |
+| **GitHub Check Run** | `enable-check-run` | `ENABLE_CHECK_RUN` | `false` — creates pass/fail Check Run (requires `checks: write`) |
+| **Extra CI Stages** | `extra-stages` | `REVIEWGROUND_EXTRA_STAGES`, `EXTRA_STAGES` | — JSON array e.g. `[{"name":"Deploy","result":"success"}]` |
 | **Comment Tag** | `comment-tag` | `REVIEWGROUND_COMMENT_TAG`, `COMMENT_TAG` | `<!-- reviewground-code-review -->` |
 
 ### Action Outputs
@@ -399,6 +418,101 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | `reviewer-engine` | The provider and model that generated the review (e.g. `Google Gemini (gemini-3.5-flash-lite)`) |
 | `summarized` | `"true"` if the CI pipeline summary was rendered |
 | `summary-markdown`| The rendered markdown table of the CI summary and stage durations |
+
+---
+
+## 📋 Custom Repository Guidelines (`.reviewground.yml`)
+
+Add a `.reviewground.yml` (or `.github/reviewground.yml`) file to your repository root to enforce team-specific coding rules:
+
+```yaml
+# .reviewground.yml
+rules:
+  - "Prefer early returns and guard clauses over deep nesting."
+  - "Every exported function in src/ must include JSDoc comments."
+  - "Always use crypto.randomUUID() instead of third-party uuid packages."
+  - "All database queries must use parameterized statements."
+```
+
+ReviewGround automatically detects this file and injects your repository rules directly into the AI prompt!
+
+---
+
+## 🛡️ Enterprise Workflow Features
+
+### 1. GitHub Check Run (PR Merge Gate)
+Turn ReviewGround into a mandatory status check in your branch protection rules. When enabled, it creates a native GitHub Check Run that **fails** if critical security vulnerabilities, injection flaws, or secret leaks are detected:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+  checks: write    # Required for Check Run gate
+
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      enable-check-run: 'true'
+      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+### 2. PR Description Auto-Update with Risk Badge
+Automatically prepend a risk level badge (🟢 Low / 🟡 Moderate / 🔴 High Risk) and executive summary to the pull request's initial description:
+
+```yaml
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      enable-pr-description-update: 'true'
+      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+### 3. Multi-Language Reviews
+Receive AI code reviews in your team's preferred language (e.g. Japanese, Spanish, German, French, Chinese, Portuguese):
+
+```yaml
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      review-language: 'ja' # 'ja', 'es', 'de', 'zh', 'pt', 'fr', etc.
+      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+### 4. Dynamic Extra Stages in CI Summary
+Append custom stages (such as deployments, visual regression, or integration suites) to the post-CI summary table:
+
+```yaml
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      mode: 'summary'
+      extra-stages: '[{"name":"E2E Cypress","result":"success"},{"name":"Staging Deploy","result":"success"}]'
+```
+
+---
+
+## 🥊 Feature Comparison: ReviewGround vs. Alternatives
+
+| Feature | **ReviewGround** | **CodeRabbit** | **Qodo (CodiumAI)** | **PR-Agent** | **GitHub Copilot** |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Pricing Model** | **100% Free (BYOK)** | $24–$30/dev/mo | Usage-based credits | Free (OSS) / BYOK | Bundled ($19–$39/dev/mo) |
+| **Provider Freedom** | ✅ **7 Providers + Custom** | ❌ Proprietary Cloud | ❌ Proprietary Cloud | ✅ BYOK (LiteLLM) | ❌ OpenAI Only |
+| **Local / Private LLMs** | ✅ Ollama, vLLM, Together | ❌ No | ❌ No | ✅ Supported | ❌ No |
+| **1-Click Diff Suggestions** | ✅ Native GitHub | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Live NPM Grounding** | ✅ **Unique** (`registry.npmjs.org`) | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Google Search Grounding** | ✅ Gemini Live Grounding | ❌ No | ❌ No | ❌ No | ❌ No |
+| **CI Duration Metrics** | ✅ **Unique** (GitHub Jobs API) | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Sticky Summary (No Spam)** | ✅ In-place `PATCH` | ✅ Yes | ✅ Yes | ⚠️ Variable | ✅ Yes |
+| **Repository Rules File** | ✅ `.reviewground.yml` | ✅ `.coderabbit.yaml` | ✅ `.qodo.toml` | ✅ `.pr_agent.toml` | ❌ No |
+| **GitHub Check Run Gate** | ✅ Native (Pass/Fail) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **PR Description Risk Badge** | ✅ 🟢/🟡/🔴 Auto-badge | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta |
+| **Multi-Language Output** | ✅ BCP-47 (`ja`, `es`, `zh`...) | ⚠️ Limited | ⚠️ Limited | ✅ Supported | ⚠️ Limited |
+| **Open Source License** | ✅ **AGPL-3.0** | ❌ Proprietary | ❌ Proprietary | ✅ Apache-2.0 | ❌ Proprietary |
+| **Runtime Architecture** | ✅ Zero-dependency (<2MB) | ❌ Hosted SaaS Proxy | ❌ Hosted SaaS Proxy | ⚠️ Python CLI / App | ❌ Hosted SaaS |
+
+> [!NOTE]
+> *Comparison accurate as of October 2026 based on publicly available documentation, pricing pages, and repository manifests. Product names and trademarks are property of their respective owners.*
 
 ---
 

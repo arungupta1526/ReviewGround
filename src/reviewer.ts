@@ -9,6 +9,20 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import { ProviderManager, ProviderResponse, ReviewOptions } from './providers/index.js';
 
+/**
+ * Truncates a git diff at a clean hunk boundary (on a `diff --git` line)
+ * to avoid sending malformed diffs to LLMs.
+ */
+export function truncateDiffClean(diff: string, maxChars = 32000): string {
+  if (diff.length <= maxChars) return diff;
+  const truncated = diff.slice(0, maxChars);
+  const lastHunkBoundary = truncated.lastIndexOf('\ndiff --git');
+  if (lastHunkBoundary > 0) {
+    return truncated.slice(0, lastHunkBoundary) + '\n\n... [diff truncated at clean boundary — large PR with many files] ...';
+  }
+  return truncated + '\n\n... [diff truncated — very large single-file change] ...';
+}
+
 export const InlineSuggestionSchema = z.object({
   path: z.string().min(1),
   line: z.coerce.number().int().positive(),
@@ -29,9 +43,14 @@ export interface ReviewerConfig {
   fallbackModels?: string[];
   temperature?: number;
   maxTokens?: number;
+  reviewLevel?: 'critical' | 'standard' | 'comprehensive';
+  reviewLanguage?: string;
+  ignorePatterns?: string[];
   enableSearchGrounding?: boolean;
   enableInlineSuggestions?: boolean;
   enableNpmVerify?: boolean;
+  enablePrDescriptionUpdate?: boolean;
+  enableCheckRun?: boolean;
   commentTag?: string;
   geminiApiKey?: string;
   openaiApiKey?: string;
@@ -256,40 +275,46 @@ export async function postOrUpdatePrComment(
   };
 
   try {
-    const listRes = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`,
-      { headers }
-    );
-
-    if (listRes.ok) {
+    // Paginate through all comment pages to find the sticky comment (handles PRs with >100 comments)
+    let existing: { id: number; body?: string } | undefined;
+    let page = 1;
+    while (!existing) {
+      const listRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
+        { headers }
+      );
+      if (!listRes.ok) break;
       const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
-      const existing = comments.find((c) => c.body?.includes(commentTag));
+      if (comments.length === 0) break;
+      existing = comments.find((c) => c.body?.includes(commentTag));
+      if (existing || comments.length < 100) break;
+      page++;
+    }
 
-      if (existing && existing.body) {
-        let commentBody = defaultCommentBody;
+    if (existing && existing.body) {
+      let commentBody = defaultCommentBody;
 
-        // Preserve existing CI pipeline status block if present
-        if (existing.body.includes(CI_SECTION_HEADER)) {
-          const ciIndex = existing.body.indexOf(CI_SECTION_HEADER);
-          const ciPart = existing.body.slice(ciIndex);
-          const tagIndex = ciPart.indexOf(commentTag);
-          const preservedCi = tagIndex !== -1 ? ciPart.slice(0, tagIndex).trimEnd() : ciPart.trimEnd();
-          commentBody = `${markdown}\n\n---\n\n${preservedCi}\n\n${commentTag}`;
+      // Preserve existing CI pipeline status block if present
+      if (existing.body.includes(CI_SECTION_HEADER)) {
+        const ciIndex = existing.body.indexOf(CI_SECTION_HEADER);
+        const ciPart = existing.body.slice(ciIndex);
+        const tagIndex = ciPart.indexOf(commentTag);
+        const preservedCi = tagIndex !== -1 ? ciPart.slice(0, tagIndex).trimEnd() : ciPart.trimEnd();
+        commentBody = `${markdown}\n\n---\n\n${preservedCi}\n\n${commentTag}`;
+      }
+
+      const updateRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/comments/${existing.id}`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: commentBody }),
         }
+      );
 
-        const updateRes = await fetch(
-          `https://api.github.com/repos/${repo}/issues/comments/${existing.id}`,
-          {
-            method: 'PATCH',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ body: commentBody }),
-          }
-        );
-
-        if (updateRes.ok) {
-          console.log(`✅ Updated existing sticky review comment on PR #${prNumber}.`);
-          return;
-        }
+      if (updateRes.ok) {
+        console.log(`✅ Updated existing sticky review comment on PR #${prNumber}.`);
+        return;
       }
     }
 
@@ -323,6 +348,15 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   const prNumber = (config.prNumber || process.env.PR_NUMBER || '').trim();
   const commentTag = config.commentTag || DEFAULT_COMMENT_TAG;
 
+  // Detect and gracefully skip automated bot PRs (e.g. dependabot[bot])
+  const isBot =
+    process.env.GITHUB_ACTOR?.includes('dependabot') ||
+    process.env.GITHUB_ACTOR?.includes('bot');
+  if (isBot) {
+    console.log(`ℹ️  Automated AI review skipped for bot PR (${process.env.GITHUB_ACTOR || 'bot'}): GitHub Actions restricts repository secrets for automated bots.`);
+    return null;
+  }
+
   // Initialize Provider Manager
   const providerManager = new ProviderManager({
     preferredProvider: config.provider,
@@ -338,20 +372,42 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
 
   const configuredProviders = providerManager.getConfiguredProviders();
   if (configuredProviders.length === 0) {
-    const isBot = process.env.GITHUB_ACTOR?.includes('dependabot') || process.env.GITHUB_ACTOR?.includes('bot');
-    if (isBot) {
-      console.log('ℹ️  Automated AI review skipped for bot PR: GitHub Actions restricts repo secrets for automated bots.');
-    } else {
-      console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.');
-    }
+    console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.');
     return null;
   }
 
   // Get diff
-  const diff = await getPullRequestDiff(repo, prNumber, token, config.baseBranch || 'main');
-  if (!diff || diff.trim().length === 0) {
+  const rawDiff = await getPullRequestDiff(repo, prNumber, token, config.baseBranch || 'main');
+  if (!rawDiff || rawDiff.trim().length === 0) {
     console.log('ℹ️  No code changes found in diff. Skipping review.');
     return null;
+  }
+
+  // Apply ignore patterns — strip matching file hunks from diff
+  let diff = rawDiff;
+  if (config.ignorePatterns && config.ignorePatterns.length > 0) {
+    const patterns = config.ignorePatterns.map((p) => p.trim()).filter(Boolean);
+    const hunkBlocks = diff.split(/(?=^diff --git)/m);
+    const filtered = hunkBlocks.filter((block) => {
+      const fileHeader = block.match(/^diff --git a\/(.+?) b\//m);
+      if (!fileHeader) return true;
+      const filePath = fileHeader[1];
+      return !patterns.some((pattern) => {
+        // Simple glob: support **, *, and literal prefix matching
+        const regex = new RegExp(
+          '^' + pattern.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]+').replace(/\./g, '\\.') + '$'
+        );
+        return regex.test(filePath);
+      });
+    });
+    diff = filtered.join('');
+    if (hunkBlocks.length !== filtered.length) {
+      console.log(`🛡️ Ignored ${hunkBlocks.length - filtered.length} file(s) matching ignore-patterns: [${patterns.join(', ')}]`);
+    }
+    if (!diff || diff.trim().length === 0) {
+      console.log('ℹ️  All changed files were excluded by ignore-patterns. Skipping review.');
+      return null;
+    }
   }
 
   // Verify packages in diff if npm check is enabled
@@ -363,18 +419,131 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     }
   }
 
-  // Truncate massive diffs to avoid context overflow
-  const truncatedDiff = diff.slice(0, 32000);
+  // Truncate massive diffs at a clean hunk boundary to avoid sending malformed diffs to LLMs
+  const truncatedDiff = truncateDiffClean(diff);
+  if (diff.length > 32000) {
+    console.log(`⚠️ Large diff detected (${diff.length} chars) — truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
+  }
   console.log(`🤖 Analyzing code diff (${truncatedDiff.length} characters)...`);
 
-  const prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+  // Build dynamic prompt based on review-level
+  const reviewLevel = config.reviewLevel || 'standard';
+  const reviewFocusMap: Record<string, string> = {
+    critical:
+      '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements.',
+    standard:
+      '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks.',
+    comprehensive:
+      '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Code style, readability, naming conventions, and documentation gaps.\n5. Test coverage gaps and missing edge-case test scenarios.\n6. Direct, actionable code fixes with concise diff blocks.',
+  };
+  const focusInstructions = reviewFocusMap[reviewLevel] ?? reviewFocusMap.standard;
+  // Check for repository custom review guidelines (.reviewground.yml / .github/reviewground.yml)
+  let customGuidelines = '';
+  for (const filename of ['.reviewground.yml', '.reviewground.yaml', '.github/reviewground.yml']) {
+    if (fs.existsSync(filename)) {
+      try {
+        const content = fs.readFileSync(filename, 'utf-8').trim();
+        if (content) {
+          customGuidelines = `\nRepository Custom Rules & Guidelines (${filename}):\n${content}\n`;
+          console.log(`📋 Loaded custom review guidelines from ${filename}`);
+          break;
+        }
+      } catch {
+        // Continue if unreadable
+      }
+    }
+  }
+
+  // F6: Multi-language output instruction
+  const lang = (config.reviewLanguage || 'en').toLowerCase().trim();
+  const languageInstruction =
+    lang !== 'en' && lang !== 'english'
+      ? `\nIMPORTANT: Write your entire review response in the following language: ${lang}.\n`
+      : '';
+
+  // Detect active provider for I7: Provider-specific prompt optimization
+  const activeProviderName = (config.provider || '').toLowerCase();
+  let prompt: string;
+
+  if (activeProviderName === 'anthropic' || (config.model || '').toLowerCase().startsWith('claude')) {
+    // I7 — Claude: Prefers XML-structured tags for diff and instructions
+    prompt = `<instructions>
+You are a Principal Software Engineer &amp; DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
-1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.
-2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).
-3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).
-4. Direct, actionable code fixes with concise diff blocks.
-${packageGroundTruthNote}
-If the code looks solid and has no bugs, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
+
+If you propose specific line-level code replacements, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions:
+\`\`\`inline_suggestions
+[{ "path": "path/to/file.ts", "line": 42, "suggestion": "  exact line replacement" }]
+\`\`\`
+</instructions>
+
+<diff>
+${truncatedDiff}
+</diff>
+`;
+  } else if (activeProviderName === 'gemini' || (config.model || '').toLowerCase().startsWith('gemini')) {
+    // I7 — Gemini: Benefits from explicit schema and JSON-structured output hints
+    prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+
+Task: Analyze the git diff below and produce a structured code review.
+
+Review focus:
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+Response format:
+- Start with a brief executive summary (1-2 sentences).
+- Use markdown sections (## Bugs, ## Security, ## Performance, etc.) as appropriate for this review level.
+- If code looks clean, respond: "✅ All changes look clean, performant, and secure!" plus 2-bullet summary.
+- If you have specific line replacements, append a JSON block at the end:
+
+\`\`\`inline_suggestions
+[{ "path": "path/to/file.ts", "line": 42, "suggestion": "  exact line replacement" }]
+\`\`\`
+
+Git Diff:
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+`;
+  } else if (
+    activeProviderName === 'groq' ||
+    (config.model || '').toLowerCase().startsWith('qwen') ||
+    (config.model || '').toLowerCase().startsWith('llama')
+  ) {
+    // I7 — Groq/Qwen: Performs better with clear markdown-separated sections
+    prompt = `## Role
+You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+
+## Task
+Analyze the following git diff.
+
+## Review Focus
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+## Instructions
+- If the code is clean, say: "✅ All changes look clean, performant, and secure!" followed by 2 bullet points.
+- Otherwise, list findings grouped under ### headers (Bugs, Security, Performance, etc.).
+- For specific line fixes, append at the very end:
+
+\`\`\`inline_suggestions
+[{ "path": "path/to/file.ts", "line": 42, "suggestion": "  exact line replacement" }]
+\`\`\`
+
+## Git Diff
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+`;
+  } else {
+    // Default generic prompt (OpenAI, DeepSeek, OpenRouter, Custom)
+    prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+Analyze the following git diff for:
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
 \`\`\`inline_suggestions
@@ -392,6 +561,8 @@ Git Diff:
 ${truncatedDiff}
 \`\`\`
 `;
+  }
+
 
   const reviewOptions: ReviewOptions = {
     model: config.model,
@@ -420,6 +591,9 @@ ${truncatedDiff}
       const result = InlineSuggestionsListSchema.safeParse(parsed);
       if (result.success) {
         inlineSuggestions.push(...result.data);
+        if (result.data.length > 5) {
+          console.log(`ℹ️ ${result.data.length} inline suggestions generated — posting top 5 (GitHub PR review API limit per run).`);
+        }
       } else {
         console.warn('ℹ️ Inline suggestions JSON schema validation failed:', result.error.format());
       }
@@ -445,10 +619,10 @@ ${cleanReviewText}
   console.log(markdownOutput);
   console.log('=======================================================\n');
 
-  // 2. Append to GitHub Step Summary
+  // 2. Append to GitHub Step Summary (async to avoid blocking event loop)
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummaryFile && fs.existsSync(stepSummaryFile)) {
-    fs.appendFileSync(stepSummaryFile, markdownOutput);
+    await fs.promises.appendFile(stepSummaryFile, markdownOutput);
     console.log('✅ Review appended to GitHub Actions step summary.');
   }
 
@@ -460,5 +634,171 @@ ${cleanReviewText}
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
   }
 
+  // 5. F1 — Auto-update PR description with AI summary + risk badge
+  if (config.enablePrDescriptionUpdate && token && repo && prNumber) {
+    await updatePrDescription(cleanReviewText, token, repo, prNumber);
+  }
+
+  // 6. F3 — Create GitHub Check Run (pass/fail gate for branch protection)
+  if (config.enableCheckRun && token && repo && prNumber) {
+    await createCheckRun(cleanReviewText, token, repo, prNumber);
+  }
+
   return response;
 }
+
+/**
+ * F1 — Auto-updates the PR body with an AI-generated summary, changed-areas
+ * checklist, and a risk level badge. Appends a dedicated section below the
+ * original PR description so the author's content is preserved.
+ */
+export async function updatePrDescription(
+  reviewText: string,
+  token: string,
+  repo: string,
+  prNumber: string
+): Promise<void> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'ReviewGround-CI-Reviewer',
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    const prRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, { headers });
+    if (!prRes.ok) {
+      console.warn(`⚠️ [F1] Could not fetch PR for description update: HTTP ${prRes.status}`);
+      return;
+    }
+    const prData = (await prRes.json()) as { body?: string | null };
+    const originalBody = prData.body || '';
+
+    // Determine risk level from keywords in review text
+    const lowerReview = reviewText.toLowerCase();
+    const hasCritical =
+      lowerReview.includes('critical') ||
+      lowerReview.includes('security') ||
+      lowerReview.includes('vulnerability') ||
+      lowerReview.includes('injection') ||
+      lowerReview.includes('xss');
+    const hasMedium =
+      lowerReview.includes('performance') ||
+      lowerReview.includes('memory') ||
+      lowerReview.includes('leak') ||
+      lowerReview.includes('warning');
+    const riskBadge = hasCritical
+      ? '🔴 **Risk Level: HIGH** — Critical issues require attention before merge.'
+      : hasMedium
+        ? '🟡 **Risk Level: MEDIUM** — Performance or style improvements suggested.'
+        : '🟢 **Risk Level: LOW** — Changes look clean and safe to merge.';
+
+    const DESCRIPTION_TAG = '<!-- reviewground-pr-description -->';
+    const aiSection = `\n\n---\n\n### 🤖 ReviewGround AI Summary\n\n${riskBadge}\n\n> *Auto-generated by [ReviewGround](https://github.com/arungupta1526/reviewground). Remove this section if not needed.*\n\n${DESCRIPTION_TAG}`;
+
+    let newBody: string;
+    if (originalBody.includes(DESCRIPTION_TAG)) {
+      // Replace existing AI section to keep it fresh
+      newBody = originalBody.replace(
+        /\n\n---\n\n### 🤖 ReviewGround AI Summary[\s\S]*?<!-- reviewground-pr-description -->/,
+        aiSection
+      );
+    } else {
+      newBody = originalBody + aiSection;
+    }
+
+    const updateRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ body: newBody }),
+    });
+
+    if (updateRes.ok) {
+      console.log(`✅ [F1] Updated PR #${prNumber} description with AI summary and risk badge.`);
+    } else {
+      console.warn(`⚠️ [F1] Could not update PR description: HTTP ${updateRes.status}`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ [F1] Error updating PR description: ${msg}`);
+  }
+}
+
+/**
+ * F3 — Creates a GitHub Check Run that acts as a pass/fail gate.
+ * Teams can require this check in branch protection rules.
+ * Conclusion is 'failure' when the review finds critical issues; 'success' otherwise.
+ */
+export async function createCheckRun(
+  reviewText: string,
+  token: string,
+  repo: string,
+  prNumber: string
+): Promise<void> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'ReviewGround-CI-Reviewer',
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    // Get the HEAD SHA from the PR
+    const prRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, { headers });
+    if (!prRes.ok) {
+      console.warn(`⚠️ [F3] Could not fetch PR SHA for check run: HTTP ${prRes.status}`);
+      return;
+    }
+    const prData = (await prRes.json()) as { head?: { sha?: string } };
+    const headSha = prData.head?.sha;
+    if (!headSha) {
+      console.warn('⚠️ [F3] No HEAD SHA found on PR. Skipping check run creation.');
+      return;
+    }
+
+    // Determine check conclusion based on review findings
+    const lowerReview = reviewText.toLowerCase();
+    const hasCriticalIssues =
+      lowerReview.includes('critical') ||
+      lowerReview.includes('vulnerability') ||
+      lowerReview.includes('security risk') ||
+      lowerReview.includes('injection') ||
+      lowerReview.includes('secret leak');
+
+    const conclusion = hasCriticalIssues ? 'failure' : 'success';
+    const title = hasCriticalIssues
+      ? 'ReviewGround: Critical issues found — review required'
+      : 'ReviewGround: Code review passed';
+    const summary = hasCriticalIssues
+      ? 'ReviewGround detected critical security or correctness issues in this PR. Please address them before merging.'
+      : 'ReviewGround AI review completed. No critical issues were found in this PR.';
+
+    const checkRes = await fetch(`https://api.github.com/repos/${repo}/check-runs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'ReviewGround AI Review',
+        head_sha: headSha,
+        status: 'completed',
+        conclusion,
+        output: {
+          title,
+          summary,
+          text: reviewText.slice(0, 65535), // GitHub Check Run output limit
+        },
+      }),
+    });
+
+    if (checkRes.ok) {
+      console.log(`✅ [F3] GitHub Check Run created (conclusion: ${conclusion}) for PR #${prNumber}.`);
+    } else {
+      const errText = await checkRes.text();
+      console.warn(`⚠️ [F3] Could not create Check Run: HTTP ${checkRes.status} — ${errText.slice(0, 200)}`);
+      console.warn('ℹ️  Ensure the workflow has `checks: write` permission for GitHub Check Run gate.');
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ [F3] Error creating Check Run: ${msg}`);
+  }
+}
+
