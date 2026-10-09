@@ -42623,19 +42623,35 @@ ${summaryMarkdown}
 }
 
 // src/index.ts
-function getOptionalInput(name, envFallback) {
+function getOptionalInput(name, envFallbacks) {
   const val = core.getInput(name);
   if (val && val.trim().length > 0) return val.trim();
-  if (envFallback && process.env[envFallback]) return (process.env[envFallback] || "").trim();
+  if (envFallbacks) {
+    const list = Array.isArray(envFallbacks) ? envFallbacks : [envFallbacks];
+    for (const envKey of list) {
+      if (process.env[envKey] && process.env[envKey].trim().length > 0) {
+        return process.env[envKey].trim();
+      }
+    }
+  }
   return "";
 }
-function getBooleanInput(name, defaultValue = true) {
+function getBooleanInput(name, envFallbacks, defaultValue = true) {
   const val = core.getInput(name);
-  if (!val) return defaultValue;
-  return val.toLowerCase() === "true" || val === "1";
+  if (val && val.trim().length > 0) return val.toLowerCase() === "true" || val === "1";
+  if (envFallbacks) {
+    const list = Array.isArray(envFallbacks) ? envFallbacks : [envFallbacks];
+    for (const envKey of list) {
+      if (process.env[envKey] !== void 0 && process.env[envKey].trim().length > 0) {
+        const envVal = process.env[envKey].trim().toLowerCase();
+        return envVal === "true" || envVal === "1";
+      }
+    }
+  }
+  return defaultValue;
 }
 function resolvePrNumber() {
-  const inputPr = getOptionalInput("pr-number", "PR_NUMBER");
+  const inputPr = getOptionalInput("pr-number", ["PR_NUMBER", "PULL_REQUEST_NUMBER"]);
   if (inputPr) return inputPr;
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (eventPath && fs3.existsSync(eventPath)) {
@@ -42650,10 +42666,10 @@ function resolvePrNumber() {
 }
 async function run() {
   try {
-    const token = getOptionalInput("github-token", "GITHUB_TOKEN");
-    const repo = getOptionalInput("repo", "GITHUB_REPOSITORY");
+    const token = getOptionalInput("github-token", ["GITHUB_TOKEN", "GH_TOKEN"]);
+    const repo = getOptionalInput("repo", ["GITHUB_REPOSITORY", "REPO_FULL_NAME"]);
     const prNumber = resolvePrNumber();
-    const mode = (getOptionalInput("mode") || "all").toLowerCase();
+    const mode = (getOptionalInput("mode", ["REVIEWGROUND_MODE", "MODE"]) || "all").toLowerCase();
     console.log("\u{1F680} ReviewGround GitHub Action Initializing...");
     console.log(`- Repository: ${repo || "local"}`);
     console.log(`- PR Number: ${prNumber || "N/A (Push or non-PR context)"}`);
@@ -42662,24 +42678,24 @@ async function run() {
       githubToken: token,
       repo,
       prNumber,
-      commentTag: getOptionalInput("comment-tag") || void 0
+      commentTag: getOptionalInput("comment-tag", ["REVIEWGROUND_COMMENT_TAG", "COMMENT_TAG"]) || void 0
     };
     if (mode === "review" || mode === "all" || mode === "both") {
       const reviewConfig = {
         ...baseConfig,
-        baseBranch: getOptionalInput("base-branch") || "main",
-        provider: getOptionalInput("provider", "PROVIDER") || void 0,
-        model: getOptionalInput("model") || void 0,
-        enableSearchGrounding: getBooleanInput("enable-search-grounding", true),
-        enableInlineSuggestions: getBooleanInput("enable-inline-suggestions", true),
-        enableNpmVerify: getBooleanInput("enable-npm-verify", true),
-        geminiApiKey: getOptionalInput("gemini-api-key", "GEMINI_API_KEY") || void 0,
-        openaiApiKey: getOptionalInput("openai-api-key", "OPENAI_API_KEY") || void 0,
-        anthropicApiKey: getOptionalInput("anthropic-api-key", "ANTHROPIC_API_KEY") || void 0,
-        groqApiKey: getOptionalInput("groq-api-key", "GROQ_API_KEY") || void 0,
-        deepseekApiKey: getOptionalInput("deepseek-api-key", "DEEPSEEK_API_KEY") || void 0,
-        llmBaseUrl: getOptionalInput("llm-base-url", "LLM_BASE_URL") || void 0,
-        llmApiKey: getOptionalInput("llm-api-key", "LLM_API_KEY") || void 0
+        baseBranch: getOptionalInput("base-branch", ["REVIEWGROUND_BASE_BRANCH", "BASE_BRANCH"]) || "main",
+        provider: getOptionalInput("provider", ["REVIEWGROUND_PROVIDER", "PROVIDER", "LLM_PROVIDER"]) || void 0,
+        model: getOptionalInput("model", ["REVIEWGROUND_MODEL", "MODEL", "LLM_MODEL"]) || void 0,
+        enableSearchGrounding: getBooleanInput("enable-search-grounding", ["ENABLE_SEARCH_GROUNDING"], true),
+        enableInlineSuggestions: getBooleanInput("enable-inline-suggestions", ["ENABLE_INLINE_SUGGESTIONS"], true),
+        enableNpmVerify: getBooleanInput("enable-npm-verify", ["ENABLE_NPM_VERIFY"], true),
+        geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY"]) || void 0,
+        openaiApiKey: getOptionalInput("openai-api-key", ["OPENAI_API_KEY"]) || void 0,
+        anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"]) || void 0,
+        groqApiKey: getOptionalInput("groq-api-key", ["GROQ_API_KEY"]) || void 0,
+        deepseekApiKey: getOptionalInput("deepseek-api-key", ["DEEPSEEK_API_KEY"]) || void 0,
+        llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL"]) || void 0,
+        llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY"]) || void 0
       };
       console.log("\n--- \u{1F916} Starting AI Code Review ---");
       const reviewResult = await runReview(reviewConfig);
@@ -42691,11 +42707,11 @@ async function run() {
     if (mode === "summary" || mode === "all" || mode === "both") {
       const summaryConfig = {
         ...baseConfig,
-        runId: getOptionalInput("run-id", "GITHUB_RUN_ID") || void 0,
-        gitleaksResult: getOptionalInput("gitleaks-result", "GITLEAKS_RESULT") || void 0,
-        auditResult: getOptionalInput("audit-result", "AUDIT_RESULT") || void 0,
-        buildResult: getOptionalInput("build-result", "BUILD_RESULT") || void 0,
-        testResult: getOptionalInput("test-result", "TEST_RESULT") || void 0
+        runId: getOptionalInput("run-id", ["GITHUB_RUN_ID", "RUN_ID"]) || void 0,
+        gitleaksResult: getOptionalInput("gitleaks-result", ["GITLEAKS_RESULT"]) || void 0,
+        auditResult: getOptionalInput("audit-result", ["AUDIT_RESULT"]) || void 0,
+        buildResult: getOptionalInput("build-result", ["BUILD_RESULT"]) || void 0,
+        testResult: getOptionalInput("test-result", ["TEST_RESULT"]) || void 0
       };
       console.log("\n--- \u{1F4CA} Starting Post-CI Summary ---");
       const summaryMarkdown = await runSummary(summaryConfig);
