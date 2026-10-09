@@ -19,7 +19,12 @@ export class GeminiProvider implements LLMProvider {
   readonly id = 'gemini' as const;
   readonly name = 'Google Gemini';
   readonly defaultModel = 'gemini-3.5-flash-lite';
-  readonly fallbackModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
+  readonly fallbackModels = [
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-3-flash-preview',
+  ];
 
   private apiKey: string;
 
@@ -91,8 +96,18 @@ export class GeminiProvider implements LLMProvider {
 
     // Hierarchy: 1. options.model -> 2. GEMINI_MODEL / MODEL -> 3. defaultModel
     const primaryModel = options.model || process.env.GEMINI_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+
+    // User-configured custom fallbacks via env var or options
+    const envFallbacks = (process.env.GEMINI_FALLBACK_MODELS || process.env.FALLBACK_MODELS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0
+      ? options.fallbackModels
+      : envFallbacks;
+
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
 
     const enableSearch = options.enableSearchGrounding !== false;
 

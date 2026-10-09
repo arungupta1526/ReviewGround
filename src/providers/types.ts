@@ -17,6 +17,7 @@ export interface ProviderResponse {
 
 export interface ReviewOptions {
   model?: string;
+  fallbackModels?: string[];
   temperature?: number;
   maxTokens?: number;
   enableSearchGrounding?: boolean;

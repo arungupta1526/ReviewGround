@@ -7,6 +7,8 @@ export class OpenRouterProvider implements LLMProvider {
   readonly fallbackModels = [
     'meta-llama/llama-3.3-70b-instruct',
     'mistralai/mistral-small-24b-instruct-2501',
+    'google/gemini-2.0-flash-exp:free',
+    'liquid/lfm-2.5-2.6b:free',
   ];
 
   private apiKey: string;
@@ -78,8 +80,18 @@ export class OpenRouterProvider implements LLMProvider {
 
     // Hierarchy: 1. options.model -> 2. OPENROUTER_MODEL / MODEL -> 3. defaultModel
     const primaryModel = options.model || process.env.OPENROUTER_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.OPENROUTER_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+
+    // Custom fallbacks via env var or options
+    const envFallbacks = (process.env.OPENROUTER_FALLBACK_MODELS || process.env.FALLBACK_MODELS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0
+      ? options.fallbackModels
+      : envFallbacks;
+
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
 
     for (const model of candidateModels) {
       console.log(`⚡ [ReviewGround] Calling OpenRouter model '${model}'...`);

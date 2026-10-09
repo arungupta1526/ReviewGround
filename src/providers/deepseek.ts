@@ -82,8 +82,18 @@ export class DeepSeekProvider implements LLMProvider {
 
     // Hierarchy: 1. options.model -> 2. DEEPSEEK_MODEL / MODEL -> 3. defaultModel
     const primaryModel = options.model || process.env.DEEPSEEK_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.DEEPSEEK_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+
+    // Custom fallbacks via env var or options
+    const envFallbacks = (process.env.DEEPSEEK_FALLBACK_MODELS || process.env.FALLBACK_MODELS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0
+      ? options.fallbackModels
+      : envFallbacks;
+
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
 
     for (const model of candidateModels) {
       console.log(`⚡ [ReviewGround] Calling DeepSeek model '${model}'...`);

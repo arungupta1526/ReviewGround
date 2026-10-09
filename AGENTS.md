@@ -8,12 +8,13 @@ This document establishes the mandatory architectural rules, Git workflows, secu
 ## 1. Mandatory Git Workflow & Branching Rules
 
 1. **NEVER make direct commits to `main`**.
-2. For every bug fix, feature addition, or code modification, create a dedicated feature or fix branch:
-   - Features: `feature/<feature-name>` (e.g., `feature/deepseek-provider`, `feature/step-durations-badge`)
-   - Fixes: `fix/<issue-name>` (e.g., `fix/comment-patch-404`, `fix/diff-truncation-boundary`)
-   - **Branch Off Current Working Branch**: Always branch off directly from the current working branch to preserve ongoing context and progress.
+2. **Branch Directly Off Active Working Branch (Never Checkout `main` First)**:
+   - For every bug fix, feature addition, or code modification, create a dedicated feature or fix branch:
+     - Features: `feature/<feature-name>` (e.g., `feature/deepseek-provider`, `feature/step-durations-badge`)
+     - Fixes: `fix/<issue-name>` (e.g., `fix/comment-patch-404`, `fix/diff-truncation-boundary`)
+   - **Never revert to or checkout `main` when creating a new branch**: Always branch directly off the **current active working branch** (`git checkout -b <new-branch>`). This preserves ongoing work, staged changes, and prevents context loss or accidental regression.
 3. **Mandatory Pre-Commit & Pre-Push Checklist**:
-   - **Sync & Prune**: Always run `git fetch --prune --all` before pushing or opening a PR to keep remote tracking branches clean.
+   - **Sync & Prune (`git fetch --prune --all`)**: Always run `git fetch --prune --all` (Git's prune/purge command) before creating branches, pushing, or opening a PR to clean up stale remote-tracking references and stay in sync with origin.
    - **Typecheck & Bundle Compilation**: Run `npm run typecheck` and `npm run build` locally. Verify that `dist/index.js` is generated without TypeScript or bundling errors.
    - **Unit Tests**: Run `npm test` locally to ensure 100% of invariant and provider test suites pass cleanly.
    - **Inspect Changes**: Always check `git status`, `git diff`, and `git log -n 3 --oneline` before staging/committing to prevent accidental secret leaks or unneeded files.

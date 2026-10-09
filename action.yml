@@ -24,6 +24,10 @@ inputs:
     description: 'Custom model name override for selected provider'
     required: false
 
+  fallback-models:
+    description: 'Comma-separated custom fallback models (e.g. "gemini-3.1-flash-lite,gemini-flash-latest")'
+    required: false
+
   gemini-api-key:
     description: 'Google Gemini API key (supports Gemini 2.5 Flash / Flash-Lite with Search Grounding)'
     required: false

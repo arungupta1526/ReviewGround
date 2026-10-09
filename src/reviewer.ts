@@ -26,6 +26,7 @@ export interface ReviewerConfig {
   baseBranch?: string;
   provider?: string;
   model?: string;
+  fallbackModels?: string[];
   temperature?: number;
   maxTokens?: number;
   enableSearchGrounding?: boolean;
@@ -394,6 +395,7 @@ ${truncatedDiff}
 
   const reviewOptions: ReviewOptions = {
     model: config.model,
+    fallbackModels: config.fallbackModels,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     enableSearchGrounding: config.enableSearchGrounding !== false,

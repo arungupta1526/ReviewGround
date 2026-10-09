@@ -41528,7 +41528,12 @@ var GeminiProvider = class {
   id = "gemini";
   name = "Google Gemini";
   defaultModel = "gemini-3.5-flash-lite";
-  fallbackModels = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
+  fallbackModels = [
+    "gemini-3.1-flash-lite",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-3-flash-preview"
+  ];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.GEMINI_API_KEY || "").trim();
@@ -41583,8 +41588,10 @@ var GeminiProvider = class {
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
     const primaryModel = options.model || process.env.GEMINI_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    const envFallbacks = (process.env.GEMINI_FALLBACK_MODELS || process.env.FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0 ? options.fallbackModels : envFallbacks;
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
     const enableSearch = options.enableSearchGrounding !== false;
     for (const model of candidateModels) {
       console.log(`\u26A1 [ReviewGround] Calling Gemini model '${model}' (Search Grounding: ${enableSearch})...`);
@@ -41614,7 +41621,7 @@ var OpenAIProvider = class {
   id = "openai";
   name = "OpenAI";
   defaultModel = "gpt-4o-mini";
-  fallbackModels = ["gpt-4o"];
+  fallbackModels = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"];
   apiKey;
   baseUrl;
   constructor(apiKey, baseUrl) {
@@ -41667,8 +41674,10 @@ var OpenAIProvider = class {
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
     const primaryModel = options.model || process.env.OPENAI_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.OPENAI_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    const envFallbacks = (process.env.OPENAI_FALLBACK_MODELS || process.env.FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0 ? options.fallbackModels : envFallbacks;
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
     for (const model of candidateModels) {
       console.log(`\u26A1 [ReviewGround] Calling OpenAI model '${model}'...`);
       const text = await this.callModel(model, prompt, options.temperature, options.maxTokens);
@@ -41690,7 +41699,11 @@ var AnthropicProvider = class {
   id = "anthropic";
   name = "Anthropic Claude";
   defaultModel = "claude-3-5-haiku-20241022";
-  fallbackModels = ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"];
+  fallbackModels = [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-sonnet-20240229"
+  ];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.ANTHROPIC_API_KEY || "").trim();
@@ -41740,8 +41753,10 @@ var AnthropicProvider = class {
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
     const primaryModel = options.model || process.env.ANTHROPIC_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.ANTHROPIC_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    const envFallbacks = (process.env.ANTHROPIC_FALLBACK_MODELS || process.env.FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0 ? options.fallbackModels : envFallbacks;
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
     for (const model of candidateModels) {
       console.log(`\u26A1 [ReviewGround] Calling Anthropic Claude model '${model}'...`);
       const text = await this.callModel(model, prompt, options.temperature, options.maxTokens);
@@ -41763,7 +41778,12 @@ var GroqProvider = class {
   id = "groq";
   name = "Groq LPU";
   defaultModel = "qwen/qwen3.8-27b";
-  fallbackModels = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
+  fallbackModels = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "allam-2-7b",
+    "llama-3.3-70b-versatile"
+  ];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.GROQ_API_KEY || "").trim();
@@ -41819,8 +41839,10 @@ var GroqProvider = class {
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
     const primaryModel = options.model || process.env.GROQ_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.GROQ_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    const envFallbacks = (process.env.GROQ_FALLBACK_MODELS || process.env.FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0 ? options.fallbackModels : envFallbacks;
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
     for (const model of candidateModels) {
       console.log(`\u26A1 [ReviewGround] Calling Groq LPU model '${model}'...`);
       const { text, reasoning } = await this.callModel(model, prompt, options.temperature, options.maxTokens);
@@ -41898,8 +41920,10 @@ var DeepSeekProvider = class {
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
     const primaryModel = options.model || process.env.DEEPSEEK_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.DEEPSEEK_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    const envFallbacks = (process.env.DEEPSEEK_FALLBACK_MODELS || process.env.FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0 ? options.fallbackModels : envFallbacks;
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
     for (const model of candidateModels) {
       console.log(`\u26A1 [ReviewGround] Calling DeepSeek model '${model}'...`);
       const { text, reasoning } = await this.callModel(model, prompt, options.temperature, options.maxTokens);
@@ -41924,7 +41948,9 @@ var OpenRouterProvider = class {
   defaultModel = "qwen/qwen-2.5-coder-32b-instruct";
   fallbackModels = [
     "meta-llama/llama-3.3-70b-instruct",
-    "mistralai/mistral-small-24b-instruct-2501"
+    "mistralai/mistral-small-24b-instruct-2501",
+    "google/gemini-2.0-flash-exp:free",
+    "liquid/lfm-2.5-2.6b:free"
   ];
   apiKey;
   baseUrl;
@@ -41980,8 +42006,10 @@ var OpenRouterProvider = class {
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
     const primaryModel = options.model || process.env.OPENROUTER_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.OPENROUTER_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    const envFallbacks = (process.env.OPENROUTER_FALLBACK_MODELS || process.env.FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0 ? options.fallbackModels : envFallbacks;
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
     for (const model of candidateModels) {
       console.log(`\u26A1 [ReviewGround] Calling OpenRouter model '${model}'...`);
       const text = await this.callModel(model, prompt, options.temperature, options.maxTokens);
@@ -42454,6 +42482,7 @@ ${truncatedDiff}
 `;
   const reviewOptions = {
     model: config2.model,
+    fallbackModels: config2.fallbackModels,
     temperature: config2.temperature,
     maxTokens: config2.maxTokens,
     enableSearchGrounding: config2.enableSearchGrounding !== false
@@ -42814,7 +42843,8 @@ async function run() {
         deepseekApiKey: getOptionalInput("deepseek-api-key", ["DEEPSEEK_API_KEY"]) || void 0,
         openrouterApiKey: getOptionalInput("openrouter-api-key", ["OPENROUTER_API_KEY"]) || void 0,
         llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL"]) || void 0,
-        llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY"]) || void 0
+        llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY"]) || void 0,
+        fallbackModels: getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]) ? getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]).split(",").map((s) => s.trim()).filter(Boolean) : void 0
       };
       console.log("\n--- \u{1F916} Starting AI Code Review ---");
       const reviewResult = await runReview(reviewConfig);

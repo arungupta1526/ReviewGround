@@ -4,7 +4,7 @@ export class OpenAIProvider implements LLMProvider {
   readonly id = 'openai' as const;
   readonly name = 'OpenAI';
   readonly defaultModel = 'gpt-4o-mini';
-  readonly fallbackModels = ['gpt-4o'];
+  readonly fallbackModels = ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 
   private apiKey: string;
   private baseUrl: string;
@@ -73,8 +73,18 @@ export class OpenAIProvider implements LLMProvider {
 
     // Hierarchy: 1. options.model -> 2. OPENAI_MODEL / MODEL -> 3. defaultModel
     const primaryModel = options.model || process.env.OPENAI_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.OPENAI_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+
+    // Custom fallbacks via env var or options
+    const envFallbacks = (process.env.OPENAI_FALLBACK_MODELS || process.env.FALLBACK_MODELS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0
+      ? options.fallbackModels
+      : envFallbacks;
+
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
 
     for (const model of candidateModels) {
       console.log(`⚡ [ReviewGround] Calling OpenAI model '${model}'...`);

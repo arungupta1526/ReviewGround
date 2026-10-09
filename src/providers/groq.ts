@@ -4,7 +4,12 @@ export class GroqProvider implements LLMProvider {
   readonly id = 'groq' as const;
   readonly name = 'Groq LPU';
   readonly defaultModel = 'qwen/qwen3.8-27b';
-  readonly fallbackModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
+  readonly fallbackModels = [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'allam-2-7b',
+    'llama-3.3-70b-versatile',
+  ];
 
   private apiKey: string;
 
@@ -92,8 +97,18 @@ export class GroqProvider implements LLMProvider {
 
     // Hierarchy: 1. options.model -> 2. GROQ_MODEL / MODEL -> 3. defaultModel
     const primaryModel = options.model || process.env.GROQ_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.GROQ_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+
+    // Custom fallbacks via env var or options
+    const envFallbacks = (process.env.GROQ_FALLBACK_MODELS || process.env.FALLBACK_MODELS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0
+      ? options.fallbackModels
+      : envFallbacks;
+
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
 
     for (const model of candidateModels) {
       console.log(`⚡ [ReviewGround] Calling Groq LPU model '${model}'...`);

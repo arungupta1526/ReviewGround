@@ -15,7 +15,11 @@ export class AnthropicProvider implements LLMProvider {
   readonly id = 'anthropic' as const;
   readonly name = 'Anthropic Claude';
   readonly defaultModel = 'claude-3-5-haiku-20241022';
-  readonly fallbackModels = ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'];
+  readonly fallbackModels = [
+    'claude-3-5-sonnet-20241022',
+    'claude-3-haiku-20240307',
+    'claude-3-sonnet-20240229',
+  ];
 
   private apiKey: string;
 
@@ -79,8 +83,18 @@ export class AnthropicProvider implements LLMProvider {
 
     // Hierarchy: 1. options.model -> 2. ANTHROPIC_MODEL / MODEL -> 3. defaultModel
     const primaryModel = options.model || process.env.ANTHROPIC_MODEL || process.env.MODEL || this.defaultModel;
-    const fallbackModel = process.env.ANTHROPIC_FALLBACK_MODEL || this.fallbackModels[0];
-    const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+
+    // Custom fallbacks via env var or options
+    const envFallbacks = (process.env.ANTHROPIC_FALLBACK_MODELS || process.env.FALLBACK_MODELS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const customFallbacks = options.fallbackModels && options.fallbackModels.length > 0
+      ? options.fallbackModels
+      : envFallbacks;
+
+    const activeFallbacks = customFallbacks.length > 0 ? customFallbacks : this.fallbackModels;
+    const candidateModels = Array.from(new Set([primaryModel, ...activeFallbacks])).filter(Boolean);
 
     for (const model of candidateModels) {
       console.log(`⚡ [ReviewGround] Calling Anthropic Claude model '${model}'...`);

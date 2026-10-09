@@ -70,13 +70,14 @@ You **never** need to commit API keys to your code. Manage them securely in GitH
    - Name: `ANTHROPIC_API_KEY` | Secret: `sk-ant-...`
    - Name: `DEEPSEEK_API_KEY` | Secret: `sk-...`
 
-#### Step B: Zero-Commit Model & Provider Control (GitHub Variables)
-Want to switch models or providers without editing your `.github/workflows` YAML or creating git commits?
+#### Step B: Zero-Commit Model, Provider & Fallback Control (GitHub Variables)
+Want to switch models, providers, or fallback chains without editing your `.github/workflows` YAML or creating git commits?
 1. In **Settings** → **Secrets and variables** → **Actions**, click the **Variables** tab.
 2. Click **New repository variable**:
    - Name: `PROVIDER` → Value: `gemini` (or `openrouter`, `openai`, `anthropic`, `groq`, `deepseek`)
-   - Name: `MODEL` → Value: `gemini-3.5-flash-lite` (or `gpt-4o`, `qwen/qwen-2.5-coder-32b-instruct`)
-3. Whenever you want to experiment with a new model or switch providers, simply update the variable value in GitHub settings. **ReviewGround picks it up on the very next PR run automatically!**
+   - Name: `MODEL` → Value: `gemini-3.5-flash-lite` (or `gpt-4o-mini`, `qwen/qwen3.8-27b`)
+   - Name: `FALLBACK_MODELS` (or e.g. `GEMINI_FALLBACK_MODELS`, `GROQ_FALLBACK_MODELS`) → Value: `gemini-3.1-flash-lite,gemini-flash-latest`
+3. Whenever you want to experiment with a new model or customize fallback chains, simply update the variable value in GitHub settings. **ReviewGround picks it up on the very next PR run automatically!**
 
 ---
 
@@ -86,17 +87,23 @@ Want to switch models or providers without editing your `.github/workflows` YAML
 **No, completely optional!** If you only provide your API keys and omit `provider` and `model`, ReviewGround auto-detects your keys and uses the optimal default baseline model.
 
 #### ❓ What happens if you configure ALL API keys? (Default Priority Order)
-When multiple keys are provided without a preference, ReviewGround uses this battle-tested priority order. If any provider experiences a quota limit (HTTP 429) or timeout, it gracefully falls over to the next provider:
+When multiple keys are provided without a preference, ReviewGround uses this battle-tested priority order. Each provider is armed with **3–4 built-in fallback models**. If any primary model encounters a quota limit (HTTP 429), model retirement, or downtime, ReviewGround seamlessly falls through the chain:
 
-| Priority Rank | Provider | Default Primary Model | Built-In Fallback Chain | Key Strength |
+| Priority Rank | Provider | Default Primary Model | Built-In Fallback Chain (3–4 Models) | Key Strength |
 |:---:|---|---|---|---|
-| **#1 (Default)** | **Google Gemini** | `gemini-3.5-flash-lite` | `gemini-3.1-flash-lite` ➔ `gemini-flash-latest` | Live Google Search Tool Grounding |
-| **#2** | **OpenAI** | `gpt-4o-mini` | `gpt-4o` | Precision DevSecOps & code analysis |
-| **#3** | **Anthropic Claude** | `claude-3-5-haiku` | `claude-3-5-sonnet` | Deep reasoning & architectural insight |
-| **#4** | **Groq LPU** | `qwen/qwen3.8-27b` | `openai/gpt-oss-120b` ➔ `openai/gpt-oss-20b` | Blazing-fast LPU inference (under 1s) |
+| **#1 (Default)** | **Google Gemini** | `gemini-3.5-flash-lite` | `gemini-3.1-flash-lite` ➔ `gemini-flash-latest` ➔ `gemini-flash-lite-latest` ➔ `gemini-3-flash-preview` | Live Google Search Tool Grounding |
+| **#2** | **OpenAI** | `gpt-4o-mini` | `gpt-4o` ➔ `gpt-4-turbo` ➔ `gpt-3.5-turbo` | Precision DevSecOps & code analysis |
+| **#3** | **Anthropic Claude** | `claude-3-5-haiku` | `claude-3-5-sonnet` ➔ `claude-3-haiku` ➔ `claude-3-sonnet` | Deep reasoning & architectural insight |
+| **#4** | **Groq LPU** | `qwen/qwen3.8-27b` | `openai/gpt-oss-120b` ➔ `openai/gpt-oss-20b` ➔ `allam-2-7b` ➔ `llama-3.3-70b-versatile` | Ultra-fast LPU inference (under 1s) |
 | **#5** | **DeepSeek** | `deepseek-chat` | `deepseek-reasoner` (R1) | Cost-effective reasoning & logic |
-| **#6** | **OpenRouter** | `qwen/qwen-2.5-coder-32b-instruct` | `meta-llama/llama-3.3-70b-instruct` | 200+ models with dedicated routing |
-| **#7** | **Custom / Ollama** | `llama3.2` | Configurable | Self-hosted & air-gapped endpoints |
+| **#6** | **OpenRouter** | `qwen/qwen-2.5-coder-32b-instruct` | `meta-llama/llama-3.3-70b-instruct` ➔ `mistralai/mistral-small-24b` ➔ `google/gemini-2.0-flash-exp:free` ➔ `liquid/lfm-2.5-2.6b:free` | 200+ models with dedicated routing |
+| **#7** | **Custom / Ollama** | `llama3.2` | User-defined | Self-hosted & air-gapped endpoints |
+
+#### 🎯 Can users define their own custom fallback models?
+**Yes!** If you want fallback to strictly occur across your chosen models instead of defaults:
+- Set via GitHub Repository Variable: `FALLBACK_MODELS="gemini-3.1-flash-lite,gemini-flash-latest"` (or provider-specific: `GEMINI_FALLBACK_MODELS`, `GROQ_FALLBACK_MODELS`, `OPENAI_FALLBACK_MODELS`, `ANTHROPIC_FALLBACK_MODELS`, `DEEPSEEK_FALLBACK_MODELS`, `OPENROUTER_FALLBACK_MODELS`).
+- Or pass via Action Input: `fallback-models: "gemini-3.1-flash-lite,gemini-flash-latest"`.
+- When set, ReviewGround **strictly restricts fallbacks to your specified models**, guaranteeing that only models you approved will ever run.
 
 #### ❓ What if a model like Qwen or Llama is hosted on another third-party provider?
 ReviewGround features **Third-Party Host Preservation**:
@@ -298,6 +305,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Execution Mode** | `mode` | `REVIEWGROUND_MODE`, `MODE` | `all` (`review` \| `summary` \| `all`) |
 | **Preferred Provider** | `provider` | `REVIEWGROUND_PROVIDER`, `PROVIDER`, `LLM_PROVIDER` | *Auto-detected* |
 | **Model Override** | `model` | `REVIEWGROUND_MODEL`, `MODEL`, `LLM_MODEL` | *Provider default* |
+| **Fallback Models** | `fallback-models` | `FALLBACK_MODELS`, `<PROVIDER>_FALLBACK_MODELS` | *Built-in 3–4 models* |
 | **Gemini API Key** | `gemini-api-key` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | — |
 | **Groq API Key** | `groq-api-key` | `GROQ_API_KEY` | — |
 | **OpenRouter API Key**| `openrouter-api-key`| `OPENROUTER_API_KEY` | — |

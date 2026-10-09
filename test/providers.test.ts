@@ -46,6 +46,14 @@ describe('Multi-Provider BYOK Engine', () => {
     assert.strictEqual(new CustomProvider().defaultModel, 'llama3.2');
   });
 
+  it('provides 3-4 built-in fallback models for resilience across providers', () => {
+    assert.strictEqual(new GeminiProvider().fallbackModels.length >= 3, true);
+    assert.strictEqual(new OpenAIProvider().fallbackModels.length >= 3, true);
+    assert.strictEqual(new AnthropicProvider().fallbackModels.length >= 3, true);
+    assert.strictEqual(new GroqProvider().fallbackModels.length >= 3, true);
+    assert.strictEqual(new OpenRouterProvider().fallbackModels.length >= 3, true);
+  });
+
   it('detects matching provider from model name prefixes', () => {
     assert.strictEqual(detectProviderFromModel('gemini-2.5-pro'), 'gemini');
     assert.strictEqual(detectProviderFromModel('gpt-4o'), 'openai');

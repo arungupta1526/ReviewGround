@@ -94,6 +94,12 @@ async function run(): Promise<void> {
         openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY']) || undefined,
         llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL']) || undefined,
         llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY']) || undefined,
+        fallbackModels: getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+          ? getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
       };
 
       console.log('\n--- 🤖 Starting AI Code Review ---');
