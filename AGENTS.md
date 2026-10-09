@@ -19,8 +19,10 @@ This document establishes the mandatory architectural rules, Git workflows, secu
    - **Unit Tests**: Run `npm test` locally to ensure 100% of invariant and provider test suites pass cleanly.
    - **Inspect Changes**: Always check `git status`, `git diff`, and `git log -n 3 --oneline` before staging/committing to prevent accidental secret leaks or unneeded files.
    - **Environment Integrity**: Ensure any new environment variables or action inputs are documented in both `action.yml` and `README.md`. Never hardcode API keys, tokens, or private credentials into source code.
-4. **Strict No-Unsolicited-Push Rule**:
-   - Even if terminal execution permissions allow automatic progression, **NEVER execute `git push` to remote (`origin`) without informing and obtaining explicit confirmation from the user in chat first**. Committing locally is encouraged, but pushing to remote must always be pre-approved.
+4. **Strict No-Unsolicited-Push Rule & PR Creation Protocol**:
+   - **Never Push Automatically**: After committing locally, **NEVER execute `git push` to remote (`origin`) without informing and obtaining explicit confirmation from the user in chat first**. All commits must remain strictly local until pre-approved.
+   - **Auto-Create PR Upon Push Confirmation**: Once the user explicitly approves pushing, push the branch (`git push -u origin <branch>`). Always check first if a PR already exists for this branch (`gh pr list --head <branch>`); if an existing PR is found, inform the developer of the updated PR. If no PR exists, immediately open a Pull Request against `main` using GitHub CLI (`gh pr create`) with a detailed title, summary, and verification details.
+   - **Strict No-Unsolicited-Merge Rule**: **NEVER merge the PR into `main` automatically**. Always ask/inform the developer and wait for their explicit command before merging any PR.
 5. **Always Commit with Detailed Information**:
    - Never make short, vague, or one-liner commit messages (e.g., avoid `fix: updates` or `feat: changes`).
    - Every commit message MUST include:
@@ -31,15 +33,15 @@ This document establishes the mandatory architectural rules, Git workflows, secu
 6. **Mandatory Post-Change README Walkthrough**:
    - After completing ANY code modification, bug fix, or feature addition, the AI agent MUST perform a thorough review and walkthrough of `README.md`.
    - Ensure complete documentation parity: all new inputs, environment variables, model defaults, provider capabilities, or workflow examples must be accurately reflected in `README.md`, regardless of whether README changes were explicitly requested.
-7. **Mandatory CHANGELOG.md Update**:
-   - After completing ANY code change (bug fix, improvement, or new feature), the AI agent MUST update `CHANGELOG.md` under the `[Unreleased]` section.
-   - Follow the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format strictly:
-     - `### Added` — for new inputs, features, functions, or files
-     - `### Fixed` — for bug fixes and defect resolutions
-     - `### Changed` — for modifications to existing behavior or config
-     - `### Removed` — for deleted inputs, features, or files
-   - Every entry must be a single, clear bullet point that a developer can read and immediately understand whether to upgrade.
-   - Never skip CHANGELOG updates — users evaluating `@v1.0.0 → @v1.1.0` upgrades rely on it to make informed decisions.
+7. **Automated Changelog & Releases via Google Release Please**:
+   - The repository uses **Google Release Please** (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`) to automate semver version bumps, GitHub Releases, and `CHANGELOG.md` updates.
+   - **No Manual Changelog Edits Required**: Because Release Please parses Git history automatically, engineers and AI agents do NOT need to manually edit `CHANGELOG.md` on every release. Release Please opens an automated Release PR directly against `main` containing the updated changelog and version bumps.
+   - **Mandatory Conventional Commits Standard**: For Release Please to accurately determine version bumps and populate the changelog, every commit header MUST adhere strictly to [Conventional Commits](https://www.conventionalcommits.org/):
+     - `feat(...)` — triggers a **Minor** bump (`1.0.0` → `1.1.0`) and populates `### Features`
+     - `fix(...)` — triggers a **Patch** bump (`1.0.0` → `1.0.1`) and populates `### Bug Fixes`
+     - `perf(...)` — triggers a **Patch** bump and populates `### Performance Improvements`
+     - `feat(...)!:` or `BREAKING CHANGE:` — triggers a **Major** bump (`1.0.0` → `2.0.0`)
+     - `docs(...)`, `chore(...)`, `test(...)`, `ci(...)`, `refactor(...)` — included in internal release tracking without triggering unnecessary version bumps.
 
 ---
 

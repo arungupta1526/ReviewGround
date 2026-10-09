@@ -22,6 +22,8 @@ export interface SummaryConfig {
    * JSON string: [{"name":"Deploy","result":"success"},{"name":"E2E","result":"failure"}]
    */
   extraStages?: string;
+  /** Execution mode ('review' | 'summary' | 'all') */
+  mode?: string;
 }
 
 export interface StageDurations {
@@ -38,6 +40,10 @@ export function getStatusBadge(result?: string): { icon: string; text: string } 
       return { icon: '⚠️', text: 'Cancelled' };
     case 'skipped':
       return { icon: '⚪', text: 'Skipped' };
+    case 'in_progress':
+      return { icon: '⏳', text: 'In Progress' };
+    case 'queued':
+      return { icon: '🕒', text: 'Queued' };
     default:
       return { icon: '❓', text: result || 'Unknown' };
   }
@@ -50,6 +56,116 @@ export function formatDuration(ms: number): string {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
+export interface DiscoveredCiJob {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  duration: string;
+  url?: string;
+}
+
+/**
+ * Determines whether any CI verification stage inputs or workflow jobs exist.
+ * Used for smart auto-skipping empty "unknown" CI tables when ReviewGround runs in 'all' mode.
+ */
+export function hasCiData(
+  gitleaks?: string,
+  audit?: string,
+  build?: string,
+  test?: string,
+  extraStages?: string,
+  durations: StageDurations = {},
+  discoveredJobsCount = 0
+): boolean {
+  const hasInputs = Boolean(
+    (gitleaks && gitleaks !== 'unknown' && gitleaks.trim().length > 0) ||
+    (audit && audit !== 'unknown' && audit.trim().length > 0) ||
+    (build && build !== 'unknown' && build.trim().length > 0) ||
+    (test && test !== 'unknown' && test.trim().length > 0) ||
+    (extraStages && extraStages.trim().length > 0)
+  );
+  const hasJobDurations = Object.keys(durations).length > 0;
+  return hasInputs || hasJobDurations || discoveredJobsCount > 0;
+}
+
+/**
+ * Queries GitHub Actions Workflow Jobs API to discover all external jobs
+ * in the current workflow run. Excludes ReviewGround's own review job.
+ */
+export async function fetchWorkflowRunJobs(
+  repo?: string,
+  runId?: string,
+  token?: string
+): Promise<DiscoveredCiJob[]> {
+  if (!repo || !runId || !token) return [];
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'ReviewGround-CI-Summary',
+        },
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+
+    if (!res.ok) {
+      console.warn(`ℹ️ Could not fetch workflow run jobs: HTTP ${res.status}`);
+      return [];
+    }
+
+    const data = (await res.json()) as {
+      jobs?: Array<{
+        id: number;
+        name: string;
+        status?: string;
+        conclusion?: string | null;
+        started_at?: string;
+        completed_at?: string;
+        html_url?: string;
+      }>;
+    };
+
+    if (!Array.isArray(data.jobs)) return [];
+
+    return data.jobs
+      .filter((job) => {
+        const lowerName = (job.name || '').toLowerCase();
+        return !lowerName.includes('reviewground');
+      })
+      .map((job) => {
+        let duration = '—';
+        if (job.started_at && job.completed_at) {
+          const ms = new Date(job.completed_at).getTime() - new Date(job.started_at).getTime();
+          duration = formatDuration(ms);
+        } else if (job.started_at) {
+          duration = 'In Progress';
+        }
+
+        const conclusion =
+          job.conclusion ||
+          (job.status === 'in_progress' ? 'in_progress' : job.status || 'unknown');
+
+        return {
+          id: job.id,
+          name: job.name,
+          status: job.status || 'unknown',
+          conclusion,
+          duration,
+          url: job.html_url,
+        };
+      });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`ℹ️ Could not fetch workflow run jobs: ${msg}`);
+    return [];
+  }
 }
 
 /**
@@ -204,6 +320,79 @@ export function buildCiSummaryMarkdown(
 ${verdict}`;
 }
 
+/**
+ * Renders a fully dynamic CI summary table discovering all workflow jobs
+ * from the GitHub Actions API without hardcoding 4 fixed stages.
+ */
+export function buildDynamicCiSummaryMarkdown(
+  jobs: DiscoveredCiJob[],
+  runId?: string,
+  repo?: string,
+  extraStagesJson?: string
+): string {
+  const runUrl = runId && repo ? `https://github.com/${repo}/actions/runs/${runId}` : '';
+  const runLinkText = runUrl ? `([View GitHub Actions Run](${runUrl}))` : '';
+
+  let allPassed = jobs.length > 0;
+  const failedJobs: string[] = [];
+  const inProgressJobs: string[] = [];
+
+  let rows = '';
+  jobs.forEach((job, idx) => {
+    const badge = getStatusBadge(job.conclusion);
+    if (job.conclusion === 'failure') {
+      allPassed = false;
+      failedJobs.push(job.name);
+    } else if (job.conclusion === 'in_progress' || job.status === 'in_progress') {
+      allPassed = false;
+      inProgressJobs.push(job.name);
+    } else if (job.conclusion !== 'success') {
+      allPassed = false;
+    }
+
+    const dur = job.duration !== '—' ? `\`${job.duration}\`` : '—';
+    const logLink = job.url ? `[View Logs](${job.url})` : '—';
+    rows += `\n| 🧪 **${idx + 1}. ${job.name}** | ${badge.icon} ${badge.text} | ${dur} | ${logLink} |`;
+  });
+
+  // Extra stages
+  if (extraStagesJson) {
+    try {
+      const parsed = JSON.parse(extraStagesJson) as Array<{ name: string; result: string }>;
+      if (Array.isArray(parsed)) {
+        parsed.forEach((stage, idx) => {
+          const badge = getStatusBadge(stage.result);
+          if (stage.result !== 'success') {
+            allPassed = false;
+            if (stage.result === 'failure') failedJobs.push(stage.name);
+          }
+          rows += `\n| 🔹 **${jobs.length + idx + 1}. ${stage.name}** | ${badge.icon} ${badge.text} | — | Custom CI stage |`;
+        });
+      }
+    } catch {
+      console.warn('⚠️ [ReviewGround] Could not parse extra-stages JSON — skipping extra rows.');
+    }
+  }
+
+  let verdict = '';
+  if (allPassed && (jobs.length > 0 || Boolean(extraStagesJson))) {
+    verdict = `🎉 **All CI checks passed successfully! (${jobs.length} jobs verified).** ${runLinkText}`;
+  } else if (failedJobs.length > 0) {
+    verdict = `❌ **CI Pipeline failed at: ${failedJobs.join(', ')}.** ${runLinkText}\nPlease check logs and apply required fixes before merging.`;
+  } else if (inProgressJobs.length > 0) {
+    verdict = `⏳ **CI Pipeline is in progress (${inProgressJobs.join(', ')}).** ${runLinkText}`;
+  } else {
+    verdict = `⚠️ **CI finished with mixed status.** ${runLinkText}`;
+  }
+
+  return `${CI_SECTION_HEADER}
+
+| Pipeline Stage / Job | Status | Duration | Verification Logs |
+|---|:---:|:---:|---|${rows}
+
+${verdict}`;
+}
+
 export async function updateOrCreateStickyComment(
   ciSummaryMarkdown: string,
   token?: string,
@@ -307,30 +496,84 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   const runId = (config.runId || process.env.RUN_ID || process.env.GITHUB_RUN_ID || '').trim();
   const commentTag = config.commentTag || DEFAULT_COMMENT_TAG;
 
-  const gitleaks = (config.gitleaksResult || process.env.GITLEAKS_RESULT || 'unknown').trim();
-  const audit = (config.auditResult || process.env.AUDIT_RESULT || 'unknown').trim();
-  const build = (config.buildResult || process.env.BUILD_RESULT || 'unknown').trim();
-  const test = (config.testResult || process.env.TEST_RESULT || 'unknown').trim();
+  const gitleaksRaw = (config.gitleaksResult || process.env.GITLEAKS_RESULT || '').trim();
+  const auditRaw = (config.auditResult || process.env.AUDIT_RESULT || '').trim();
+  const buildRaw = (config.buildResult || process.env.BUILD_RESULT || '').trim();
+  const testRaw = (config.testResult || process.env.TEST_RESULT || '').trim();
+  const extraStagesRaw = (config.extraStages || process.env.REVIEWGROUND_EXTRA_STAGES || process.env.EXTRA_STAGES || '').trim();
 
-  console.log('📊 [ReviewGround] Generating Post-CI Summary...');
-  console.log(`- Gitleaks Result: ${gitleaks}`);
-  console.log(`- Dependency Audit Result: ${audit}`);
-  console.log(`- Build Result: ${build}`);
-  console.log(`- Test Result: ${test}`);
+  // 1. Live Job Auto-Discovery from GitHub Actions API
+  const discoveredJobs = await fetchWorkflowRunJobs(repo, runId, token);
+  if (discoveredJobs.length > 0) {
+    console.log(`- Discovered Workflow Jobs (${discoveredJobs.length}): ${discoveredJobs.map((j) => j.name).join(', ')}`);
+  }
 
+  // 2. Duration mapping
   const durations = await fetchStageDurations(repo, runId, token);
-  console.log('- Stage Durations:', JSON.stringify(durations));
 
-  const summaryMarkdown = buildCiSummaryMarkdown(
-    gitleaks,
-    audit,
-    build,
-    test,
+  const hasData = hasCiData(
+    gitleaksRaw,
+    auditRaw,
+    buildRaw,
+    testRaw,
+    extraStagesRaw,
     durations,
-    runId,
-    repo,
-    config.extraStages
+    discoveredJobs.length
   );
+
+  if (!hasData && config.mode !== 'summary') {
+    console.log(`ℹ️  [ReviewGround] No CI verification stage inputs or external workflow jobs detected. Smart skipping Post-CI summary table in '${config.mode || 'all'}' mode.`);
+    return '';
+  }
+
+  const hasExplicitInputs = Boolean(
+    (gitleaksRaw && gitleaksRaw !== 'unknown' && gitleaksRaw.length > 0) ||
+    (auditRaw && auditRaw !== 'unknown' && auditRaw.length > 0) ||
+    (buildRaw && buildRaw !== 'unknown' && buildRaw.length > 0) ||
+    (testRaw && testRaw !== 'unknown' && testRaw.length > 0)
+  );
+
+  let summaryMarkdown = '';
+  if (hasExplicitInputs) {
+    const gitleaks = gitleaksRaw || 'unknown';
+    const audit = auditRaw || 'unknown';
+    const build = buildRaw || 'unknown';
+    const test = testRaw || 'unknown';
+
+    console.log('📊 [ReviewGround] Generating Post-CI Summary (Explicit Stages)...');
+    console.log(`- Gitleaks Result: ${gitleaks}`);
+    console.log(`- Dependency Audit Result: ${audit}`);
+    console.log(`- Build Result: ${build}`);
+    console.log(`- Test Result: ${test}`);
+    console.log('- Stage Durations:', JSON.stringify(durations));
+
+    summaryMarkdown = buildCiSummaryMarkdown(
+      gitleaks,
+      audit,
+      build,
+      test,
+      durations,
+      runId,
+      repo,
+      extraStagesRaw || undefined
+    );
+  } else if (discoveredJobs.length > 0) {
+    console.log(`📊 [ReviewGround] Generating Post-CI Summary dynamically for ${discoveredJobs.length} workflow job(s)...`);
+    summaryMarkdown = buildDynamicCiSummaryMarkdown(
+      discoveredJobs,
+      runId,
+      repo,
+      extraStagesRaw || undefined
+    );
+  } else {
+    // Only extra stages or explicit mode='summary'
+    summaryMarkdown = buildDynamicCiSummaryMarkdown(
+      [],
+      runId,
+      repo,
+      extraStagesRaw || undefined
+    );
+  }
 
   // 1. Output to console
   console.log('\n================== 🚦 CI SUMMARY ==================\n');

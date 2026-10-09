@@ -37,6 +37,7 @@ export interface ReviewerConfig {
   githubToken?: string;
   repo?: string;
   prNumber?: string;
+  runId?: string;
   baseBranch?: string;
   provider?: string;
   model?: string;
@@ -373,6 +374,30 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   const configuredProviders = providerManager.getConfiguredProviders();
   if (configuredProviders.length === 0) {
     console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.');
+    if (token && repo && prNumber) {
+      const noKeyNotice = `## 🛡️ ReviewGround AI Code Review
+
+> [!IMPORTANT]
+> **No AI Provider API Key Configured**
+>
+> ReviewGround was unable to run an AI code review on this pull request because no LLM API key was detected in your repository secrets or environment variables.
+>
+> ### 🔑 How to Activate AI Reviews (1-Minute Setup):
+> 1. In this repository, navigate to **Settings ➔ Secrets and variables ➔ Actions**.
+> 2. Click **New repository secret** and add your preferred provider key:
+>    - **\`GEMINI_API_KEY\`** — Free tier available at [Google AI Studio](https://aistudio.google.com/app/apikey) *(Recommended)*
+>    - **\`GROQ_API_KEY\`** — Ultra-fast LPU inference at [Groq Console](https://console.groq.com/keys) *(Free tier)*
+>    - **\`OPENROUTER_API_KEY\`** — 15+ free models at [OpenRouter](https://openrouter.ai/keys)
+>    - **\`OPENAI_API_KEY\`**, **\`ANTHROPIC_API_KEY\`**, or **\`DEEPSEEK_API_KEY\`**
+> 3. Once added, re-run this workflow or push a new commit to start receiving automated AI code reviews!
+>
+> *(Note: If you only intended to post CI verification summaries, configure \`mode: summary\` in your workflow).*
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+
+      await postOrUpdatePrComment(noKeyNotice, token, repo, prNumber, commentTag);
+    }
     return null;
   }
 
@@ -575,6 +600,27 @@ ${truncatedDiff}
   const response = await providerManager.executeReview(prompt, reviewOptions);
   if (!response) {
     console.warn('⚠️ Review execution returned no result.');
+    if (token && repo && prNumber) {
+      const runId = config.runId || process.env.GITHUB_RUN_ID;
+      const runUrl = runId && repo ? `https://github.com/${repo}/actions/runs/${runId}` : '';
+      const runLink = runUrl ? `[View GitHub Actions Run Logs](${runUrl})` : 'check the GitHub Actions workflow logs';
+
+      const errorNotice = `## 🛡️ ReviewGround AI Code Review Notice
+
+> [!WARNING]
+> **AI Review Generation Failed**
+>
+> ReviewGround attempted to analyze this pull request, but all configured AI providers failed to return a valid response (e.g. API rate limit, quota exhaustion, network timeout, or invalid credentials).
+>
+> - **Attempted Provider(s):** ${configuredProviders.map((p) => p.name).join(', ')}
+> - Please ${runLink} for detailed error output.
+> - Verify your API key quotas or consider configuring a fallback provider (e.g. \`GROQ_API_KEY\`, \`OPENROUTER_API_KEY\`, or \`GEMINI_API_KEY\`).
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+
+      await postOrUpdatePrComment(errorNotice, token, repo, prNumber, commentTag);
+    }
     return null;
   }
 
@@ -605,13 +651,13 @@ ${truncatedDiff}
   const groundingBadge = response.searchGroundingUsed ? ' 🌐 *Live Search Grounded*' : '';
   const engineString = `${response.provider} (${response.model})${groundingBadge}`;
 
-  const markdownOutput = `## 🤖 AI Code Review & Security Analysis
+  const markdownOutput = `## 🛡️ ReviewGround AI Code Review & Security Analysis
 *Reviewer Engine: ${engineString}*
 
 ${cleanReviewText}
 
 ---
-*Generated automatically by [ReviewGround](https://github.com/reviewground/reviewground) (${engineString}).*
+*Generated automatically by [ReviewGround](https://github.com/arungupta1526/ReviewGround) (${engineString}).*
 `;
 
   // 1. Output to CI Console

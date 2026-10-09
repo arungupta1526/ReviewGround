@@ -74,6 +74,7 @@ async function run(): Promise<void> {
       repo,
       prNumber,
       commentTag: getOptionalInput('comment-tag', ['REVIEWGROUND_COMMENT_TAG', 'COMMENT_TAG']) || undefined,
+      runId: getOptionalInput('run-id', ['GITHUB_RUN_ID', 'RUN_ID']) || undefined,
     };
 
     // Mode: review or all
@@ -99,14 +100,14 @@ async function run(): Promise<void> {
         enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
         enableInlineSuggestions: getBooleanInput('enable-inline-suggestions', ['ENABLE_INLINE_SUGGESTIONS'], true),
         enableNpmVerify: getBooleanInput('enable-npm-verify', ['ENABLE_NPM_VERIFY'], true),
-        geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY']) || undefined,
-        openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY']) || undefined,
-        anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY']) || undefined,
-        groqApiKey: getOptionalInput('groq-api-key', ['GROQ_API_KEY']) || undefined,
-        deepseekApiKey: getOptionalInput('deepseek-api-key', ['DEEPSEEK_API_KEY']) || undefined,
-        openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY']) || undefined,
-        llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL']) || undefined,
-        llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY']) || undefined,
+        geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
+        openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY', 'OPENAI_KEY']) || undefined,
+        anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY']) || undefined,
+        groqApiKey: getOptionalInput('groq-api-key', ['GROQ_API_KEY', 'GROQ_KEY']) || undefined,
+        deepseekApiKey: getOptionalInput('deepseek-api-key', ['DEEPSEEK_API_KEY', 'DEEPSEEK_KEY']) || undefined,
+        openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY', 'OPENROUTER_KEY']) || undefined,
+        llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL', 'OLLAMA_BASE_URL', 'OLLAMA_HOST']) || undefined,
+        llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY', 'CUSTOM_API_KEY']) || undefined,
         fallbackModels: getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
           ? getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
               .split(',')
@@ -130,7 +131,7 @@ async function run(): Promise<void> {
     if (mode === 'summary' || mode === 'all' || mode === 'both') {
       const summaryConfig: SummaryConfig = {
         ...baseConfig,
-        runId: getOptionalInput('run-id', ['GITHUB_RUN_ID', 'RUN_ID']) || undefined,
+        mode,
         gitleaksResult: getOptionalInput('gitleaks-result', ['GITLEAKS_RESULT']) || undefined,
         auditResult: getOptionalInput('audit-result', ['AUDIT_RESULT']) || undefined,
         buildResult: getOptionalInput('build-result', ['BUILD_RESULT']) || undefined,
@@ -140,8 +141,13 @@ async function run(): Promise<void> {
 
       console.log('\n--- 📊 Starting Post-CI Summary ---');
       const summaryMarkdown = await runSummary(summaryConfig);
-      core.setOutput('summarized', 'true');
-      core.setOutput('summary-markdown', summaryMarkdown);
+      if (summaryMarkdown && summaryMarkdown.length > 0) {
+        core.setOutput('summarized', 'true');
+        core.setOutput('summary-markdown', summaryMarkdown);
+      } else {
+        core.setOutput('summarized', 'false');
+        core.setOutput('summary-markdown', '');
+      }
     }
 
     console.log('\n✨ ReviewGround completed successfully.');
