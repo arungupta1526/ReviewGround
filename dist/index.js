@@ -40192,7 +40192,7 @@ async function runReview(config2 = {}) {
 > *(Note: If you only intended to post CI verification summaries, configure \`mode: summary\` in your workflow).*
 
 ---
-*Powered by [ReviewGround](https://github.com/reviewground/reviewground)*`;
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
       await postOrUpdatePrComment(noKeyNotice, token, repo, prNumber, commentTag);
     }
     return null;
@@ -40387,7 +40387,7 @@ ${truncatedDiff}
 > - Verify your API key quotas or consider configuring a fallback provider (e.g. \`GROQ_API_KEY\`, \`OPENROUTER_API_KEY\`, or \`GEMINI_API_KEY\`).
 
 ---
-*Powered by [ReviewGround](https://github.com/reviewground/reviewground)*`;
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
       await postOrUpdatePrComment(errorNotice, token, repo, prNumber, commentTag);
     }
     return null;
@@ -40421,7 +40421,7 @@ ${truncatedDiff}
 ${cleanReviewText}
 
 ---
-*Generated automatically by [ReviewGround](https://github.com/reviewground/reviewground) (${engineString}).*
+*Generated automatically by [ReviewGround](https://github.com/arungupta1526/ReviewGround) (${engineString}).*
 `;
   console.log("\n================== \u{1F916} AI CODE REVIEW ==================\n");
   console.log(markdownOutput);
@@ -40563,6 +40563,10 @@ function getStatusBadge(result) {
       return { icon: "\u26A0\uFE0F", text: "Cancelled" };
     case "skipped":
       return { icon: "\u26AA", text: "Skipped" };
+    case "in_progress":
+      return { icon: "\u23F3", text: "In Progress" };
+    case "queued":
+      return { icon: "\u{1F552}", text: "Queued" };
     default:
       return { icon: "\u2753", text: result || "Unknown" };
   }
@@ -40575,12 +40579,59 @@ function formatDuration(ms) {
   const secs = totalSeconds % 60;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
-function hasCiData(gitleaks, audit, build, test, extraStages, durations = {}) {
+function hasCiData(gitleaks, audit, build, test, extraStages, durations = {}, discoveredJobsCount = 0) {
   const hasInputs = Boolean(
     gitleaks && gitleaks !== "unknown" && gitleaks.trim().length > 0 || audit && audit !== "unknown" && audit.trim().length > 0 || build && build !== "unknown" && build.trim().length > 0 || test && test !== "unknown" && test.trim().length > 0 || extraStages && extraStages.trim().length > 0
   );
   const hasJobDurations = Object.keys(durations).length > 0;
-  return hasInputs || hasJobDurations;
+  return hasInputs || hasJobDurations || discoveredJobsCount > 0;
+}
+async function fetchWorkflowRunJobs(repo, runId, token) {
+  if (!repo || !runId || !token) return [];
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "ReviewGround-CI-Summary"
+        },
+        signal: AbortSignal.timeout(15e3)
+      }
+    );
+    if (!res.ok) {
+      console.warn(`\u2139\uFE0F Could not fetch workflow run jobs: HTTP ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    if (!Array.isArray(data.jobs)) return [];
+    return data.jobs.filter((job) => {
+      const lowerName = (job.name || "").toLowerCase();
+      return !lowerName.includes("reviewground");
+    }).map((job) => {
+      let duration3 = "\u2014";
+      if (job.started_at && job.completed_at) {
+        const ms = new Date(job.completed_at).getTime() - new Date(job.started_at).getTime();
+        duration3 = formatDuration(ms);
+      } else if (job.started_at) {
+        duration3 = "In Progress";
+      }
+      const conclusion = job.conclusion || (job.status === "in_progress" ? "in_progress" : job.status || "unknown");
+      return {
+        id: job.id,
+        name: job.name,
+        status: job.status || "unknown",
+        conclusion,
+        duration: duration3,
+        url: job.html_url
+      };
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`\u2139\uFE0F Could not fetch workflow run jobs: ${msg}`);
+    return [];
+  }
 }
 async function fetchStageDurations(repo, runId, token) {
   const durations = {};
@@ -40678,6 +40729,65 @@ Please check logs and apply required fixes before merging.`;
 | \u{1F40D} **2. Dependency Audit** | ${aBadge.icon} ${aBadge.text} | ${aDur} | Security vulnerability & zero-CVE audit |
 | \u{1F40D} **3. Build & Compilation** | ${bBadge.icon} ${bBadge.text} | ${bDur} | Clean build compilation & type safety |
 | \u{1F40D} **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |${extraRows}
+
+${verdict}`;
+}
+function buildDynamicCiSummaryMarkdown(jobs, runId, repo, extraStagesJson) {
+  const runUrl = runId && repo ? `https://github.com/${repo}/actions/runs/${runId}` : "";
+  const runLinkText = runUrl ? `([View GitHub Actions Run](${runUrl}))` : "";
+  let allPassed = jobs.length > 0;
+  const failedJobs = [];
+  const inProgressJobs = [];
+  let rows = "";
+  jobs.forEach((job, idx) => {
+    const badge = getStatusBadge(job.conclusion);
+    if (job.conclusion === "failure") {
+      allPassed = false;
+      failedJobs.push(job.name);
+    } else if (job.conclusion === "in_progress" || job.status === "in_progress") {
+      allPassed = false;
+      inProgressJobs.push(job.name);
+    } else if (job.conclusion !== "success") {
+      allPassed = false;
+    }
+    const dur = job.duration !== "\u2014" ? `\`${job.duration}\`` : "\u2014";
+    const logLink = job.url ? `[View Logs](${job.url})` : "\u2014";
+    rows += `
+| \u{1F9EA} **${idx + 1}. ${job.name}** | ${badge.icon} ${badge.text} | ${dur} | ${logLink} |`;
+  });
+  if (extraStagesJson) {
+    try {
+      const parsed = JSON.parse(extraStagesJson);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((stage, idx) => {
+          const badge = getStatusBadge(stage.result);
+          if (stage.result !== "success") {
+            allPassed = false;
+            if (stage.result === "failure") failedJobs.push(stage.name);
+          }
+          rows += `
+| \u{1F539} **${jobs.length + idx + 1}. ${stage.name}** | ${badge.icon} ${badge.text} | \u2014 | Custom CI stage |`;
+        });
+      }
+    } catch {
+      console.warn("\u26A0\uFE0F [ReviewGround] Could not parse extra-stages JSON \u2014 skipping extra rows.");
+    }
+  }
+  let verdict = "";
+  if (allPassed && (jobs.length > 0 || Boolean(extraStagesJson))) {
+    verdict = `\u{1F389} **All CI checks passed successfully! (${jobs.length} jobs verified).** ${runLinkText}`;
+  } else if (failedJobs.length > 0) {
+    verdict = `\u274C **CI Pipeline failed at: ${failedJobs.join(", ")}.** ${runLinkText}
+Please check logs and apply required fixes before merging.`;
+  } else if (inProgressJobs.length > 0) {
+    verdict = `\u23F3 **CI Pipeline is in progress (${inProgressJobs.join(", ")}).** ${runLinkText}`;
+  } else {
+    verdict = `\u26A0\uFE0F **CI finished with mixed status.** ${runLinkText}`;
+  }
+  return `${CI_SECTION_HEADER}
+
+| Pipeline Stage / Job | Status | Duration | Verification Logs |
+|---|:---:|:---:|---|${rows}
 
 ${verdict}`;
 }
@@ -40786,6 +40896,10 @@ async function runSummary(config2 = {}) {
   const buildRaw = (config2.buildResult || process.env.BUILD_RESULT || "").trim();
   const testRaw = (config2.testResult || process.env.TEST_RESULT || "").trim();
   const extraStagesRaw = (config2.extraStages || process.env.REVIEWGROUND_EXTRA_STAGES || process.env.EXTRA_STAGES || "").trim();
+  const discoveredJobs = await fetchWorkflowRunJobs(repo, runId, token);
+  if (discoveredJobs.length > 0) {
+    console.log(`- Discovered Workflow Jobs (${discoveredJobs.length}): ${discoveredJobs.map((j) => j.name).join(", ")}`);
+  }
   const durations = await fetchStageDurations(repo, runId, token);
   const hasData = hasCiData(
     gitleaksRaw,
@@ -40793,32 +40907,54 @@ async function runSummary(config2 = {}) {
     buildRaw,
     testRaw,
     extraStagesRaw,
-    durations
+    durations,
+    discoveredJobs.length
   );
   if (!hasData && config2.mode !== "summary") {
-    console.log(`\u2139\uFE0F  [ReviewGround] No CI verification stage inputs (gitleaks-result, audit-result, build-result, test-result) or matching jobs detected. Smart skipping Post-CI summary table in '${config2.mode || "all"}' mode.`);
+    console.log(`\u2139\uFE0F  [ReviewGround] No CI verification stage inputs or external workflow jobs detected. Smart skipping Post-CI summary table in '${config2.mode || "all"}' mode.`);
     return "";
   }
-  const gitleaks = gitleaksRaw || "unknown";
-  const audit = auditRaw || "unknown";
-  const build = buildRaw || "unknown";
-  const test = testRaw || "unknown";
-  console.log("\u{1F4CA} [ReviewGround] Generating Post-CI Summary...");
-  console.log(`- Gitleaks Result: ${gitleaks}`);
-  console.log(`- Dependency Audit Result: ${audit}`);
-  console.log(`- Build Result: ${build}`);
-  console.log(`- Test Result: ${test}`);
-  console.log("- Stage Durations:", JSON.stringify(durations));
-  const summaryMarkdown = buildCiSummaryMarkdown(
-    gitleaks,
-    audit,
-    build,
-    test,
-    durations,
-    runId,
-    repo,
-    extraStagesRaw || void 0
+  const hasExplicitInputs = Boolean(
+    gitleaksRaw && gitleaksRaw !== "unknown" && gitleaksRaw.length > 0 || auditRaw && auditRaw !== "unknown" && auditRaw.length > 0 || buildRaw && buildRaw !== "unknown" && buildRaw.length > 0 || testRaw && testRaw !== "unknown" && testRaw.length > 0
   );
+  let summaryMarkdown = "";
+  if (hasExplicitInputs) {
+    const gitleaks = gitleaksRaw || "unknown";
+    const audit = auditRaw || "unknown";
+    const build = buildRaw || "unknown";
+    const test = testRaw || "unknown";
+    console.log("\u{1F4CA} [ReviewGround] Generating Post-CI Summary (Explicit Stages)...");
+    console.log(`- Gitleaks Result: ${gitleaks}`);
+    console.log(`- Dependency Audit Result: ${audit}`);
+    console.log(`- Build Result: ${build}`);
+    console.log(`- Test Result: ${test}`);
+    console.log("- Stage Durations:", JSON.stringify(durations));
+    summaryMarkdown = buildCiSummaryMarkdown(
+      gitleaks,
+      audit,
+      build,
+      test,
+      durations,
+      runId,
+      repo,
+      extraStagesRaw || void 0
+    );
+  } else if (discoveredJobs.length > 0) {
+    console.log(`\u{1F4CA} [ReviewGround] Generating Post-CI Summary dynamically for ${discoveredJobs.length} workflow job(s)...`);
+    summaryMarkdown = buildDynamicCiSummaryMarkdown(
+      discoveredJobs,
+      runId,
+      repo,
+      extraStagesRaw || void 0
+    );
+  } else {
+    summaryMarkdown = buildDynamicCiSummaryMarkdown(
+      [],
+      runId,
+      repo,
+      extraStagesRaw || void 0
+    );
+  }
   console.log("\n================== \u{1F6A6} CI SUMMARY ==================\n");
   console.log(summaryMarkdown);
   console.log("====================================================\n");
@@ -40915,14 +41051,14 @@ async function run() {
         enableSearchGrounding: getBooleanInput("enable-search-grounding", ["ENABLE_SEARCH_GROUNDING"], true),
         enableInlineSuggestions: getBooleanInput("enable-inline-suggestions", ["ENABLE_INLINE_SUGGESTIONS"], true),
         enableNpmVerify: getBooleanInput("enable-npm-verify", ["ENABLE_NPM_VERIFY"], true),
-        geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY"]) || void 0,
-        openaiApiKey: getOptionalInput("openai-api-key", ["OPENAI_API_KEY"]) || void 0,
-        anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"]) || void 0,
-        groqApiKey: getOptionalInput("groq-api-key", ["GROQ_API_KEY"]) || void 0,
-        deepseekApiKey: getOptionalInput("deepseek-api-key", ["DEEPSEEK_API_KEY"]) || void 0,
-        openrouterApiKey: getOptionalInput("openrouter-api-key", ["OPENROUTER_API_KEY"]) || void 0,
-        llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL"]) || void 0,
-        llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY"]) || void 0,
+        geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY"]) || void 0,
+        openaiApiKey: getOptionalInput("openai-api-key", ["OPENAI_API_KEY", "OPENAI_KEY"]) || void 0,
+        anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_KEY", "CLAUDE_KEY"]) || void 0,
+        groqApiKey: getOptionalInput("groq-api-key", ["GROQ_API_KEY", "GROQ_KEY"]) || void 0,
+        deepseekApiKey: getOptionalInput("deepseek-api-key", ["DEEPSEEK_API_KEY", "DEEPSEEK_KEY"]) || void 0,
+        openrouterApiKey: getOptionalInput("openrouter-api-key", ["OPENROUTER_API_KEY", "OPENROUTER_KEY"]) || void 0,
+        llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL", "OLLAMA_BASE_URL", "OLLAMA_HOST"]) || void 0,
+        llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY", "CUSTOM_API_KEY"]) || void 0,
         fallbackModels: getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]) ? getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]).split(",").map((s) => s.trim()).filter(Boolean) : void 0,
         reviewLanguage: getOptionalInput("review-language", ["REVIEWGROUND_REVIEW_LANGUAGE", "REVIEW_LANGUAGE"]) || "en",
         enablePrDescriptionUpdate: getBooleanInput("enable-pr-description-update", ["ENABLE_PR_DESCRIPTION_UPDATE"], false),

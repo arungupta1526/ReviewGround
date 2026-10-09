@@ -62,13 +62,18 @@ You **never** need to commit API keys to your code. Manage them securely in GitH
 1. In your GitHub repository, click **Settings** (top tab).
 2. In the left navigation menu, navigate to **Secrets and variables** → **Actions**.
 3. Under the **Repository secrets** section, click **New repository secret**.
-4. Add any keys you have:
-   - Name: `GEMINI_API_KEY` | Secret: `AIzaSy...`
-   - Name: `GROQ_API_KEY` | Secret: `gsk_...`
-   - Name: `OPENROUTER_API_KEY` | Secret: `sk-or-v1-...`
-   - Name: `OPENAI_API_KEY` | Secret: `sk-proj-...`
-   - Name: `ANTHROPIC_API_KEY` | Secret: `sk-ant-...`
-   - Name: `DEEPSEEK_API_KEY` | Secret: `sk-...`
+4. You can name your secret using any of the recognized aliases (ReviewGround auto-detects all of them):
+
+| Provider | Primary Secret Name | Supported Alternate Aliases | Free Tier? |
+|---|---|---|:---:|
+| **Google Gemini** | `GEMINI_API_KEY` | `GOOGLE_API_KEY`, `GEMINI_KEY` | ✅ Yes |
+| **Groq LPU** | `GROQ_API_KEY` | `GROQ_KEY` | ✅ Yes |
+| **OpenRouter** | `OPENROUTER_API_KEY` | `OPENROUTER_KEY` | ✅ Yes |
+| **OpenAI** | `OPENAI_API_KEY` | `OPENAI_KEY` | Paid |
+| **Anthropic Claude** | `ANTHROPIC_API_KEY` | `CLAUDE_API_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY` | Paid |
+| **DeepSeek** | `DEEPSEEK_API_KEY` | `DEEPSEEK_KEY` | Paid |
+| **Custom / Ollama URL** | `LLM_BASE_URL` | `OPENAI_BASE_URL`, `OLLAMA_BASE_URL`, `OLLAMA_HOST` | Self-Hosted |
+| **Custom Endpoint Key** | `LLM_API_KEY` | `CUSTOM_API_KEY` | Optional |
 
 #### Step B: Zero-Commit Model, Provider & Fallback Control (GitHub Variables)
 Want to switch models, providers, or fallback chains without editing your `.github/workflows` YAML or creating git commits?
@@ -428,17 +433,18 @@ Developers can apply fixes with native GitHub buttons directly in the **Files ch
 ```
 All line numbers are validated and safely coerced with **Zod 4.6.5** schemas (`InlineSuggestionsListSchema`), preventing runtime crashes when LLMs return string line numbers.
 
-### 3. 📊 Post-CI Single Sticky PR Summary & Stage Durations
+### 3. 📊 Post-CI Single Sticky PR Summary & Dynamic Job Discovery
 ReviewGround detects previous comments using a persistent HTML marker (`<!-- reviewground-code-review -->`) and updates them using `PATCH /repos/{owner}/{repo}/issues/comments/{id}`.  
 - New commits update the existing review in-place without comment spam.
-- Queries GitHub Actions Workflow Jobs API (`/actions/runs/{run_id}/jobs`) to compute exact execution durations:
+- **Dynamic Job Auto-Discovery:** ReviewGround queries the GitHub Actions Workflow Jobs API (`/actions/runs/{run_id}/jobs`) to automatically discover **all workflow jobs** (whether 1, 3, or 10 jobs like Lint, Typecheck, Docker Build, Playwright E2E, Deploy) without forcing hardcoded stages:
 
-| Pipeline Stage | Status | Duration | Verification Summary |
+| Pipeline Stage / Job | Status | Duration | Verification Logs |
 |---|:---:|:---:|---|
-| 🐍 **1. Gitleaks Secret Scan** | ✅ Passed | `8s` | Secret, token & credential leak detection |
-| 🐍 **2. Dependency Audit** | ✅ Passed | `14s` | Security vulnerability & zero-CVE audit |
-| 🐍 **3. Build & Compilation** | ✅ Passed | `42s` | Clean build compilation & type safety |
-| 🐍 **4. Test Verification** | ✅ Passed | `1m 15s` | Unit tests & invariant suites |
+| 🧪 **1. Lint & Typecheck** | ✅ Passed | `14s` | [View Logs](https://github.com/owner/repo/actions/runs/123/job/1) |
+| 🧪 **2. Docker Container Build** | ✅ Passed | `1m 20s` | [View Logs](https://github.com/owner/repo/actions/runs/123/job/2) |
+| 🧪 **3. Playwright E2E Tests** | ✅ Passed | `45s` | [View Logs](https://github.com/owner/repo/actions/runs/123/job/3) |
+
+*(Note: If you provide explicit 4-stage inputs like `gitleaks-result` or `build-result`, ReviewGround will render them according to your custom inputs).*
 
 ---
 
@@ -448,21 +454,21 @@ ReviewGround detects previous comments using a persistent HTML marker (`<!-- rev
 
 Every setting can be passed either as an Action Input (`with:`) or as an Environment Variable / Secret (`env:`):
 
-| Setting | Action Input (`with:`) | Environment Variable (`env:` / `vars.*`) | Default |
+| Setting | Action Input (`with:`) | Environment Variable & Secret Aliases (`env:` / `vars.*`) | Default |
 |---|---|---|:---:|
-| **GitHub Token** | `github-token` | `GITHUB_TOKEN` | `${{ github.token }}` |
+| **GitHub Token** | `github-token` | `GITHUB_TOKEN`, `GH_TOKEN` | `${{ github.token }}` |
 | **Execution Mode** | `mode` | `REVIEWGROUND_MODE`, `MODE` | `all` (`review` \| `summary` \| `all`) |
 | **Preferred Provider** | `provider` | `REVIEWGROUND_PROVIDER`, `PROVIDER`, `LLM_PROVIDER` | *Auto-detected* |
 | **Model Override** | `model` | `REVIEWGROUND_MODEL`, `MODEL`, `LLM_MODEL` | *Provider default* |
 | **Fallback Models** | `fallback-models` | `FALLBACK_MODELS`, `<PROVIDER>_FALLBACK_MODELS` | *Built-in 3–4 models* |
-| **Gemini API Key** | `gemini-api-key` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | — |
-| **Groq API Key** | `groq-api-key` | `GROQ_API_KEY` | — |
-| **OpenRouter API Key**| `openrouter-api-key`| `OPENROUTER_API_KEY` | — |
-| **OpenAI API Key** | `openai-api-key` | `OPENAI_API_KEY` | — |
-| **Anthropic API Key**| `anthropic-api-key` | `ANTHROPIC_API_KEY`, `CLAUDE_API_KEY` | — |
-| **DeepSeek API Key** | `deepseek-api-key` | `DEEPSEEK_API_KEY` | — |
-| **Custom Base URL** | `llm-base-url` | `LLM_BASE_URL`, `OPENAI_BASE_URL` | — |
-| **Custom API Key** | `llm-api-key` | `LLM_API_KEY` | — |
+| **Gemini API Key** | `gemini-api-key` | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_KEY` | — |
+| **Groq API Key** | `groq-api-key` | `GROQ_API_KEY`, `GROQ_KEY` | — |
+| **OpenRouter API Key**| `openrouter-api-key`| `OPENROUTER_API_KEY`, `OPENROUTER_KEY` | — |
+| **OpenAI API Key** | `openai-api-key` | `OPENAI_API_KEY`, `OPENAI_KEY` | — |
+| **Anthropic API Key**| `anthropic-api-key` | `ANTHROPIC_API_KEY`, `CLAUDE_API_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY` | — |
+| **DeepSeek API Key** | `deepseek-api-key` | `DEEPSEEK_API_KEY`, `DEEPSEEK_KEY` | — |
+| **Custom Base URL** | `llm-base-url` | `LLM_BASE_URL`, `OPENAI_BASE_URL`, `OLLAMA_BASE_URL`, `OLLAMA_HOST` | — |
+| **Custom API Key** | `llm-api-key` | `LLM_API_KEY`, `CUSTOM_API_KEY` | — |
 | **Search Grounding** | `enable-search-grounding`| `ENABLE_SEARCH_GROUNDING` | `true` |
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |

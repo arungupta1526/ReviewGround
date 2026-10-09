@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Fully Dynamic CI Workflow Job Auto-Discovery (`fetchWorkflowRunJobs()`, `buildDynamicCiSummaryMarkdown()`) — Automatically discovers all running and completed jobs in the workflow run via the GitHub Actions API without hardcoding 4 fixed stages, displaying real job names, statuses, durations, and log links
+- Flexible API Key & Base URL Aliases — Added support for popular shorthand and platform aliases: `GEMINI_KEY`, `GROQ_KEY`, `OPENROUTER_KEY`, `OPENAI_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY`, `DEEPSEEK_KEY`, `OLLAMA_BASE_URL`, `OLLAMA_HOST`, and `CUSTOM_API_KEY`
 - `hasCiData()` & Smart CI Verification Auto-Skip — In `mode: all` (default), automatically suppresses the Post-CI verification table if no CI stage results (`gitleaks-result`, `audit-result`, `build-result`, `test-result`, `extra-stages`) or matching workflow jobs are detected, eliminating noisy `unknown` status rows
 - Actionable missing-key setup guidance PR comments — When a pull request runs without any configured LLM API keys, ReviewGround posts a clean, interactive setup banner on the PR with direct links to free provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`)
 - Diagnostic failure notifications on PR comments — When all configured AI providers fail due to quota exhaustion, rate limits, or network timeouts, posts a diagnostic notice linking to GitHub Actions run logs

@@ -4,6 +4,7 @@ import {
   formatDuration,
   getStatusBadge,
   buildCiSummaryMarkdown,
+  buildDynamicCiSummaryMarkdown,
   hasCiData,
 } from '../src/summary.js';
 
@@ -75,5 +76,24 @@ describe('CI Summary & Duration Tracking', () => {
 
     // Detected job durations should return true even if inputs are missing
     assert.strictEqual(hasCiData('', '', '', '', '', { build: '10s' }), true);
+
+    // Discovered jobs should return true even if all inputs are missing
+    assert.strictEqual(hasCiData('', '', '', '', '', {}, 3), true);
+    assert.strictEqual(hasCiData('', '', '', '', '', {}, 0), false);
+  });
+
+  it('builds dynamic CI summary markdown table for arbitrary workflow jobs', () => {
+    const jobs = [
+      { id: 1, name: 'Lint & Typecheck', status: 'completed', conclusion: 'success', duration: '14s', url: 'https://github.com/runs/1/job/1' },
+      { id: 2, name: 'Docker Build', status: 'completed', conclusion: 'success', duration: '1m 20s', url: 'https://github.com/runs/1/job/2' },
+      { id: 3, name: 'Playwright E2E', status: 'completed', conclusion: 'failure', duration: '45s', url: 'https://github.com/runs/1/job/3' },
+    ];
+
+    const md = buildDynamicCiSummaryMarkdown(jobs, '123456', 'owner/repo');
+    assert.ok(md.includes('### 🚦 CI Pipeline Results & Verification'));
+    assert.ok(md.includes('| 🧪 **1. Lint & Typecheck** | ✅ Passed | `14s` | [View Logs](https://github.com/runs/1/job/1) |'));
+    assert.ok(md.includes('| 🧪 **2. Docker Build** | ✅ Passed | `1m 20s` | [View Logs](https://github.com/runs/1/job/2) |'));
+    assert.ok(md.includes('| 🧪 **3. Playwright E2E** | ❌ Failed | `45s` | [View Logs](https://github.com/runs/1/job/3) |'));
+    assert.ok(md.includes('❌ **CI Pipeline failed at: Playwright E2E.**'));
   });
 });
