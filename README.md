@@ -258,6 +258,77 @@ jobs:
 
 ---
 
+## 🏗️ End-to-End Architecture & Workflow
+
+```mermaid
+flowchart TD
+    %% Custom Themed Color Palettes
+    classDef trigger fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+    classDef config fill:#181825,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef safety fill:#313244,stroke:#f9e2af,stroke-width:2px,color:#f9e2af;
+    classDef grounding fill:#11261f,stroke:#a6e3a1,stroke-width:2px,color:#a6e3a1;
+    classDef llm fill:#2b1b3d,stroke:#f38ba8,stroke-width:2px,color:#f5c2e7;
+    classDef zod fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe;
+    classDef output fill:#11261f,stroke:#a6e3a1,stroke-width:2px,color:#a6e3a1;
+    classDef summary fill:#261828,stroke:#fab387,stroke-width:2px,color:#fab387;
+
+    subgraph TRIGGER["1. GitHub Event & Context Resolution"]
+        PR["PR Event: opened / synchronize / reopened"]:::trigger
+        BOT{"Is PR from Automated Bot?<br/>(e.g. dependabot[bot])"}:::safety
+        SKIP["Graceful Skip (Preserves CI Build Green)"]:::safety
+    end
+
+    subgraph CONFIG["2. Dynamic Config & Key Auto-Detection"]
+        PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
+        DETECT{"Auto-Detect Provider Priority<br/>Gemini ➔ OpenAI ➔ Claude ➔ Groq ➔ DeepSeek ➔ OpenRouter"}:::config
+    end
+
+    subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
+        DIFF["Extract PR Diff & Target Base Branch (main)"]:::config
+        NPM["Live NPM Registry Check (registry.npmjs.org)<br/>Verifies Node 24, Zod 4, TS 7 releases"]:::grounding
+        SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
+        PROMPT["Assemble Grounded Prompt + System Guardrails"]:::grounding
+        CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
+        FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
+        CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3–4 Built-In Models)"]:::llm
+        ZOD["Zod 4.6.5 Validation & Line Number Coercion<br/>(InlineSuggestionsListSchema)"]:::zod
+        COMMENT_INLINE["GitHub Pull Request Review Comments API<br/>1-Click '[ Apply suggestion ]' In Diff"]:::output
+    end
+
+    subgraph SUMMARY_FLOW["4. Post-CI Pipeline Sticky Summary"]
+        JOB_API["Query GitHub Actions Jobs API<br/>(/actions/runs/{run_id}/jobs)"]:::summary
+        DURATIONS["Calculate Exact Stage Durations<br/>(Gitleaks, Audit, Build, Test)"]:::summary
+        STICKY_FIND{"Previous Review Sticky Comment Found?<br/>(&lt;!-- reviewground-code-review --&gt;)"}:::summary
+        UPDATE["PATCH Existing Comment (In-Place Update)"]:::output
+        CREATE["POST New Sticky Comment"]:::output
+    end
+
+    %% Flow Routing
+    PR --> BOT
+    BOT -- "Yes" --> SKIP
+    BOT -- "No" --> PARSE
+    PARSE --> DETECT
+    DETECT --> DIFF
+    DIFF --> NPM
+    NPM --> SEARCH
+    SEARCH --> PROMPT
+    PROMPT --> CALL_PRIMARY
+    CALL_PRIMARY --> FALLBACK_CHECK
+    FALLBACK_CHECK -- "Failed / 429" --> CALL_FALLBACK
+    FALLBACK_CHECK -- "Success" --> ZOD
+    CALL_FALLBACK --> ZOD
+    ZOD --> COMMENT_INLINE
+
+    %% CI Summary Flow Trigger
+    DETECT -. "mode: summary or all" .-> JOB_API
+    JOB_API --> DURATIONS
+    DURATIONS --> STICKY_FIND
+    STICKY_FIND -- "Found" --> UPDATE
+    STICKY_FIND -- "Not Found" --> CREATE
+```
+
+---
+
 ## 🚀 Key Architectural Pillars
 
 ### 1. 🌐 Google Search Grounding & NPM Live Registry Check
