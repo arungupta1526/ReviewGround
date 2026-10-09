@@ -83,6 +83,19 @@ async function run(): Promise<void> {
         baseBranch: getOptionalInput('base-branch', ['REVIEWGROUND_BASE_BRANCH', 'BASE_BRANCH']) || 'main',
         provider: getOptionalInput('provider', ['REVIEWGROUND_PROVIDER', 'PROVIDER', 'LLM_PROVIDER']) || undefined,
         model: getOptionalInput('model', ['REVIEWGROUND_MODEL', 'MODEL', 'LLM_MODEL']) || undefined,
+        temperature: (() => {
+          const t = getOptionalInput('temperature', ['REVIEWGROUND_TEMPERATURE', 'LLM_TEMPERATURE']);
+          return t ? parseFloat(t) : undefined;
+        })(),
+        maxTokens: (() => {
+          const m = getOptionalInput('max-tokens', ['REVIEWGROUND_MAX_TOKENS', 'LLM_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : undefined;
+        })(),
+        reviewLevel: (getOptionalInput('review-level', ['REVIEWGROUND_REVIEW_LEVEL', 'REVIEW_LEVEL']) || 'standard') as 'critical' | 'standard' | 'comprehensive',
+        ignorePatterns: (() => {
+          const raw = getOptionalInput('ignore-patterns', ['REVIEWGROUND_IGNORE_PATTERNS', 'IGNORE_PATTERNS']);
+          return raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
+        })(),
         enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
         enableInlineSuggestions: getBooleanInput('enable-inline-suggestions', ['ENABLE_INLINE_SUGGESTIONS'], true),
         enableNpmVerify: getBooleanInput('enable-npm-verify', ['ENABLE_NPM_VERIFY'], true),

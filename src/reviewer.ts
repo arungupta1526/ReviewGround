@@ -9,6 +9,20 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import { ProviderManager, ProviderResponse, ReviewOptions } from './providers/index.js';
 
+/**
+ * Truncates a git diff at a clean hunk boundary (on a `diff --git` line)
+ * to avoid sending malformed diffs to LLMs.
+ */
+export function truncateDiffClean(diff: string, maxChars = 32000): string {
+  if (diff.length <= maxChars) return diff;
+  const truncated = diff.slice(0, maxChars);
+  const lastHunkBoundary = truncated.lastIndexOf('\ndiff --git');
+  if (lastHunkBoundary > 0) {
+    return truncated.slice(0, lastHunkBoundary) + '\n\n... [diff truncated at clean boundary — large PR with many files] ...';
+  }
+  return truncated + '\n\n... [diff truncated — very large single-file change] ...';
+}
+
 export const InlineSuggestionSchema = z.object({
   path: z.string().min(1),
   line: z.coerce.number().int().positive(),
@@ -29,6 +43,8 @@ export interface ReviewerConfig {
   fallbackModels?: string[];
   temperature?: number;
   maxTokens?: number;
+  reviewLevel?: 'critical' | 'standard' | 'comprehensive';
+  ignorePatterns?: string[];
   enableSearchGrounding?: boolean;
   enableInlineSuggestions?: boolean;
   enableNpmVerify?: boolean;
@@ -256,40 +272,46 @@ export async function postOrUpdatePrComment(
   };
 
   try {
-    const listRes = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`,
-      { headers }
-    );
-
-    if (listRes.ok) {
+    // Paginate through all comment pages to find the sticky comment (handles PRs with >100 comments)
+    let existing: { id: number; body?: string } | undefined;
+    let page = 1;
+    while (!existing) {
+      const listRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
+        { headers }
+      );
+      if (!listRes.ok) break;
       const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
-      const existing = comments.find((c) => c.body?.includes(commentTag));
+      if (comments.length === 0) break;
+      existing = comments.find((c) => c.body?.includes(commentTag));
+      if (existing || comments.length < 100) break;
+      page++;
+    }
 
-      if (existing && existing.body) {
-        let commentBody = defaultCommentBody;
+    if (existing && existing.body) {
+      let commentBody = defaultCommentBody;
 
-        // Preserve existing CI pipeline status block if present
-        if (existing.body.includes(CI_SECTION_HEADER)) {
-          const ciIndex = existing.body.indexOf(CI_SECTION_HEADER);
-          const ciPart = existing.body.slice(ciIndex);
-          const tagIndex = ciPart.indexOf(commentTag);
-          const preservedCi = tagIndex !== -1 ? ciPart.slice(0, tagIndex).trimEnd() : ciPart.trimEnd();
-          commentBody = `${markdown}\n\n---\n\n${preservedCi}\n\n${commentTag}`;
+      // Preserve existing CI pipeline status block if present
+      if (existing.body.includes(CI_SECTION_HEADER)) {
+        const ciIndex = existing.body.indexOf(CI_SECTION_HEADER);
+        const ciPart = existing.body.slice(ciIndex);
+        const tagIndex = ciPart.indexOf(commentTag);
+        const preservedCi = tagIndex !== -1 ? ciPart.slice(0, tagIndex).trimEnd() : ciPart.trimEnd();
+        commentBody = `${markdown}\n\n---\n\n${preservedCi}\n\n${commentTag}`;
+      }
+
+      const updateRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/comments/${existing.id}`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: commentBody }),
         }
+      );
 
-        const updateRes = await fetch(
-          `https://api.github.com/repos/${repo}/issues/comments/${existing.id}`,
-          {
-            method: 'PATCH',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ body: commentBody }),
-          }
-        );
-
-        if (updateRes.ok) {
-          console.log(`✅ Updated existing sticky review comment on PR #${prNumber}.`);
-          return;
-        }
+      if (updateRes.ok) {
+        console.log(`✅ Updated existing sticky review comment on PR #${prNumber}.`);
+        return;
       }
     }
 
@@ -323,6 +345,15 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   const prNumber = (config.prNumber || process.env.PR_NUMBER || '').trim();
   const commentTag = config.commentTag || DEFAULT_COMMENT_TAG;
 
+  // Detect and gracefully skip automated bot PRs (e.g. dependabot[bot])
+  const isBot =
+    process.env.GITHUB_ACTOR?.includes('dependabot') ||
+    process.env.GITHUB_ACTOR?.includes('bot');
+  if (isBot) {
+    console.log(`ℹ️  Automated AI review skipped for bot PR (${process.env.GITHUB_ACTOR || 'bot'}): GitHub Actions restricts repository secrets for automated bots.`);
+    return null;
+  }
+
   // Initialize Provider Manager
   const providerManager = new ProviderManager({
     preferredProvider: config.provider,
@@ -338,20 +369,42 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
 
   const configuredProviders = providerManager.getConfiguredProviders();
   if (configuredProviders.length === 0) {
-    const isBot = process.env.GITHUB_ACTOR?.includes('dependabot') || process.env.GITHUB_ACTOR?.includes('bot');
-    if (isBot) {
-      console.log('ℹ️  Automated AI review skipped for bot PR: GitHub Actions restricts repo secrets for automated bots.');
-    } else {
-      console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.');
-    }
+    console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.');
     return null;
   }
 
   // Get diff
-  const diff = await getPullRequestDiff(repo, prNumber, token, config.baseBranch || 'main');
-  if (!diff || diff.trim().length === 0) {
+  const rawDiff = await getPullRequestDiff(repo, prNumber, token, config.baseBranch || 'main');
+  if (!rawDiff || rawDiff.trim().length === 0) {
     console.log('ℹ️  No code changes found in diff. Skipping review.');
     return null;
+  }
+
+  // Apply ignore patterns — strip matching file hunks from diff
+  let diff = rawDiff;
+  if (config.ignorePatterns && config.ignorePatterns.length > 0) {
+    const patterns = config.ignorePatterns.map((p) => p.trim()).filter(Boolean);
+    const hunkBlocks = diff.split(/(?=^diff --git)/m);
+    const filtered = hunkBlocks.filter((block) => {
+      const fileHeader = block.match(/^diff --git a\/(.+?) b\//m);
+      if (!fileHeader) return true;
+      const filePath = fileHeader[1];
+      return !patterns.some((pattern) => {
+        // Simple glob: support **, *, and literal prefix matching
+        const regex = new RegExp(
+          '^' + pattern.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]+').replace(/\./g, '\\.') + '$'
+        );
+        return regex.test(filePath);
+      });
+    });
+    diff = filtered.join('');
+    if (hunkBlocks.length !== filtered.length) {
+      console.log(`🛡️ Ignored ${hunkBlocks.length - filtered.length} file(s) matching ignore-patterns: [${patterns.join(', ')}]`);
+    }
+    if (!diff || diff.trim().length === 0) {
+      console.log('ℹ️  All changed files were excluded by ignore-patterns. Skipping review.');
+      return null;
+    }
   }
 
   // Verify packages in diff if npm check is enabled
@@ -363,18 +416,46 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     }
   }
 
-  // Truncate massive diffs to avoid context overflow
-  const truncatedDiff = diff.slice(0, 32000);
+  // Truncate massive diffs at a clean hunk boundary to avoid sending malformed diffs to LLMs
+  const truncatedDiff = truncateDiffClean(diff);
+  if (diff.length > 32000) {
+    console.log(`⚠️ Large diff detected (${diff.length} chars) — truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
+  }
   console.log(`🤖 Analyzing code diff (${truncatedDiff.length} characters)...`);
+
+  // Build dynamic prompt based on review-level
+  const reviewLevel = config.reviewLevel || 'standard';
+  const reviewFocusMap: Record<string, string> = {
+    critical:
+      '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements.',
+    standard:
+      '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks.',
+    comprehensive:
+      '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Code style, readability, naming conventions, and documentation gaps.\n5. Test coverage gaps and missing edge-case test scenarios.\n6. Direct, actionable code fixes with concise diff blocks.',
+  };
+  const focusInstructions = reviewFocusMap[reviewLevel] ?? reviewFocusMap.standard;
+  // Check for repository custom review guidelines (.reviewground.yml / .github/reviewground.yml)
+  let customGuidelines = '';
+  for (const filename of ['.reviewground.yml', '.reviewground.yaml', '.github/reviewground.yml']) {
+    if (fs.existsSync(filename)) {
+      try {
+        const content = fs.readFileSync(filename, 'utf-8').trim();
+        if (content) {
+          customGuidelines = `\nRepository Custom Rules & Guidelines (${filename}):\n${content}\n`;
+          console.log(`📋 Loaded custom review guidelines from ${filename}`);
+          break;
+        }
+      } catch {
+        // Continue if unreadable
+      }
+    }
+  }
 
   const prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
-1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.
-2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).
-3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).
-4. Direct, actionable code fixes with concise diff blocks.
-${packageGroundTruthNote}
-If the code looks solid and has no bugs, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}
+If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
 \`\`\`inline_suggestions
@@ -420,6 +501,9 @@ ${truncatedDiff}
       const result = InlineSuggestionsListSchema.safeParse(parsed);
       if (result.success) {
         inlineSuggestions.push(...result.data);
+        if (result.data.length > 5) {
+          console.log(`ℹ️ ${result.data.length} inline suggestions generated — posting top 5 (GitHub PR review API limit per run).`);
+        }
       } else {
         console.warn('ℹ️ Inline suggestions JSON schema validation failed:', result.error.format());
       }
@@ -445,10 +529,10 @@ ${cleanReviewText}
   console.log(markdownOutput);
   console.log('=======================================================\n');
 
-  // 2. Append to GitHub Step Summary
+  // 2. Append to GitHub Step Summary (async to avoid blocking event loop)
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummaryFile && fs.existsSync(stepSummaryFile)) {
-    fs.appendFileSync(stepSummaryFile, markdownOutput);
+    await fs.promises.appendFile(stepSummaryFile, markdownOutput);
     console.log('✅ Review appended to GitHub Actions step summary.');
   }
 

@@ -80,6 +80,25 @@ inputs:
     required: false
     default: 'main'
 
+  temperature:
+    description: 'LLM sampling temperature (0.0–1.0). Lower = more precise/deterministic, higher = more creative. Default: 0.2'
+    required: false
+    default: '0.2'
+
+  max-tokens:
+    description: 'Maximum output tokens for the AI review response. Default: 2048'
+    required: false
+    default: '2048'
+
+  review-level:
+    description: 'Review depth: "critical" (bugs & security only), "standard" (default — bugs, security, performance), "comprehensive" (all including style & docs)'
+    required: false
+    default: 'standard'
+
+  ignore-patterns:
+    description: 'Comma-separated glob patterns to exclude from AI review (e.g. "dist/**,*.min.js,src/migrations/**")'
+    required: false
+
   comment-tag:
     description: 'HTML comment tag used to identify sticky PR comments'
     required: false
@@ -90,25 +109,24 @@ inputs:
     required: false
 
   gitleaks-result:
-    description: 'Outcome of Gitleaks stage (e.g. ${{ needs.gitleaks.result }})'
+    description: 'Outcome of Gitleaks stage (e.g. needs.gitleaks.result)'
     required: false
 
   audit-result:
-    description: 'Outcome of dependency audit stage (e.g. ${{ needs.security-audit.result }})'
+    description: 'Outcome of dependency audit stage (e.g. needs.security-audit.result)'
     required: false
 
   build-result:
-    description: 'Outcome of build stage (e.g. ${{ needs.build.result }})'
+    description: 'Outcome of build stage (e.g. needs.build.result)'
     required: false
 
   test-result:
-    description: 'Outcome of test stage (e.g. ${{ needs.test.result }})'
+    description: 'Outcome of test stage (e.g. needs.test.result)'
     required: false
 
   run-id:
-    description: 'GitHub Actions workflow run ID for duration calculation'
+    description: 'GitHub Actions workflow run ID for duration calculation (defaults to GITHUB_RUN_ID)'
     required: false
-    default: '${{ github.run_id }}'
 
 outputs:
   reviewed:

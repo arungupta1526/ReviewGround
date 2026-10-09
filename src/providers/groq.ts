@@ -30,7 +30,12 @@ export class GroqProvider implements LLMProvider {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     const safePrompt =
       prompt.length > 16000
-        ? prompt.slice(0, 16000) + '\n\n...[diff truncated for Groq token limit]'
+        ? (() => {
+            console.warn(
+              `⚠️ [ReviewGround] Groq: diff is large (${prompt.length} chars). Truncating to 16,000 chars for Groq token limit. Large PRs may produce an incomplete review.`
+            );
+            return prompt.slice(0, 16000) + '\n\n...[diff truncated for Groq context window limit]';
+          })()
         : prompt;
 
     try {

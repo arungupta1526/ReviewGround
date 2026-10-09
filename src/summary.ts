@@ -199,18 +199,24 @@ export async function updateOrCreateStickyComment(
   };
 
   try {
-    const listRes = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`,
-      { headers }
-    );
-
-    if (!listRes.ok) {
-      console.warn(`⚠️ Could not list comments for PR #${prNumber}: HTTP ${listRes.status}`);
-      return;
+    // Paginate through all comment pages to find the sticky comment (handles PRs with >100 comments)
+    let existing: { id: number; body?: string } | undefined;
+    let page = 1;
+    while (!existing) {
+      const listRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
+        { headers }
+      );
+      if (!listRes.ok) {
+        console.warn(`⚠️ Could not list comments for PR #${prNumber}: HTTP ${listRes.status}`);
+        break;
+      }
+      const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
+      if (comments.length === 0) break;
+      existing = comments.find((c) => c.body?.includes(commentTag));
+      if (existing || comments.length < 100) break;
+      page++;
     }
-
-    const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
-    const existing = comments.find((c) => c.body?.includes(commentTag));
 
     if (existing && existing.body) {
       let updatedBody = existing.body;
@@ -306,10 +312,10 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   console.log(summaryMarkdown);
   console.log('====================================================\n');
 
-  // 2. Append to GitHub Actions Step Summary
+  // 2. Append to GitHub Actions Step Summary (async to avoid blocking event loop)
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummaryFile && fs.existsSync(stepSummaryFile)) {
-    fs.appendFileSync(stepSummaryFile, `\n\n${summaryMarkdown}\n`);
+    await fs.promises.appendFile(stepSummaryFile, `\n\n${summaryMarkdown}\n`);
     console.log('✅ CI Summary appended to GitHub Actions step summary.');
   }
 

@@ -389,6 +389,10 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |
 | **Base Branch** | `base-branch` | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH` | `main` |
+| **LLM Temperature** | `temperature` | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE` | `0.2` |
+| **Max Tokens** | `max-tokens` | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS` | `2048` |
+| **Review Level** | `review-level` | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL` | `standard` (`critical` \| `standard` \| `comprehensive`) |
+| **Ignore Patterns** | `ignore-patterns` | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS` | — (comma-separated globs e.g. `dist/**,*.min.js`) |
 | **Comment Tag** | `comment-tag` | `REVIEWGROUND_COMMENT_TAG`, `COMMENT_TAG` | `<!-- reviewground-code-review -->` |
 
 ### Action Outputs
@@ -399,6 +403,23 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | `reviewer-engine` | The provider and model that generated the review (e.g. `Google Gemini (gemini-3.5-flash-lite)`) |
 | `summarized` | `"true"` if the CI pipeline summary was rendered |
 | `summary-markdown`| The rendered markdown table of the CI summary and stage durations |
+
+---
+
+## 📋 Custom Repository Guidelines (`.reviewground.yml`)
+
+Add a `.reviewground.yml` (or `.github/reviewground.yml`) file to your repository root to enforce team-specific coding rules:
+
+```yaml
+# .reviewground.yml
+rules:
+  - "Prefer early returns and guard clauses over deep nesting."
+  - "Every exported function in src/ must include JSDoc comments."
+  - "Always use crypto.randomUUID() instead of third-party uuid packages."
+  - "All database queries must use parameterized statements."
+```
+
+ReviewGround automatically detects this file and injects your repository rules directly into the AI prompt!
 
 ---
 
