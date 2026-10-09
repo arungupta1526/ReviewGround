@@ -9,7 +9,7 @@
 [![Node Runtime](https://img.shields.io/badge/Node-24%20LTS-green.svg?logo=node.js)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-blue.svg?logo=typescript)](package.json)
 [![Zod](https://img.shields.io/badge/Zod-4.6.5-3E67B1.svg?logo=zod)](package.json)
-[![BYOK Multi-Provider](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI%20%7C%20Claude%20%7C%20Groq%20%7C%20DeepSeek-orange.svg)](#-how-to-get-api-keys--configure-github)
+[![BYOK Multi-Provider](https://img.shields.io/badge/BYOK-Gemini%20%7C%20OpenAI%20%7C%20Claude%20%7C%20Groq%20%7C%20DeepSeek%20%7C%20OpenRouter-orange.svg)](#-how-to-get-api-keys--configure-github)
 [![Security: 0 Vulnerabilities](https://img.shields.io/badge/Security-0%20Vulnerabilities-success.svg)](package.json)
 
 *Stop paying $50/seat/month for proprietary AI code review bots.*  
@@ -24,14 +24,15 @@
 | Feature | Standard AI Review Bots | ReviewGround |
 |---|:---:|:---:|
 | **Pricing** | $20–$60 / developer / month | **100% Free & Open-Core (BYOK)** |
-| **Provider Freedom** | Locked into single proprietary vendor | **Gemini, OpenAI, Claude, Groq, DeepSeek, Ollama** |
+| **Provider Freedom** | Locked into single proprietary vendor | **Gemini, OpenAI, Claude, Groq, DeepSeek, OpenRouter, Ollama** |
 | **Model Customization** | Fixed models only | **Full Custom Model Override (`model: '...'`)** |
+| **Multi-Host Safety** | Hijacks open models to hardcoded hosts | **Preserves Custom & OpenRouter host selections (Qwen, Llama)** |
 | **Zero-Commit Control** | Must edit YAML & commit for model changes | **Change Provider/Model via GitHub Repo Variables** |
 | **Hallucination Prevention** | None (flags modern packages as non-existent) | **Real-Time NPM Registry Search Grounding** |
 | **Commit Suggestions** | Markdown text diff blocks | **Native GitHub 1-Click `[ Apply suggestion ]` Buttons** |
 | **PR Comment Noise** | Spams 5–10 new comments per PR push | **Single In-Place Sticky Comment (Updated via PATCH)** |
 | **CI Duration Tracking** | Not supported | **Workflow Jobs API Duration Metrics (`9s`, `1m 24s`)** |
-| **Local / Air-Gapped AI** | Not supported | **Self-hosted Ollama / vLLM / OpenRouter compatible** |
+| **Local / Air-Gapped AI** | Not supported | **Self-hosted Ollama / Together AI / vLLM compatible** |
 
 ---
 
@@ -44,11 +45,12 @@ You bring your own API key(s) from any provider you prefer. ReviewGround support
 | Provider | Recommended Baseline | Free Tier Available? | Get Your API Key (Direct Link) |
 |---|---|:---:|---|
 | **Google Gemini** | `gemini-3.5-flash-lite` | ✅ **Yes** | 🔗 [Google AI Studio](https://aistudio.google.com/app/apikey) |
-| **Groq LPU** | `llama-3.3-70b-versatile` | ✅ **Yes** | 🔗 [Groq Console](https://console.groq.com/keys) |
+| **Groq LPU** | `qwen/qwen3.8-27b` | ✅ **Yes** | 🔗 [Groq Console](https://console.groq.com/keys) |
+| **OpenRouter** | `qwen/qwen-2.5-coder-32b-instruct` | ✅ **Yes (15+ free models)** | 🔗 [OpenRouter Keys](https://openrouter.ai/keys) |
 | **OpenAI** | `gpt-4o-mini` | Paid / Credits | 🔗 [OpenAI Platform](https://platform.openai.com/api-keys) |
 | **Anthropic Claude** | `claude-3-5-haiku` | Paid / Credits | 🔗 [Anthropic Console](https://console.anthropic.com/settings/keys) |
 | **DeepSeek** | `deepseek-chat` | Paid (Low Cost) | 🔗 [DeepSeek Platform](https://platform.deepseek.com/api_keys) |
-| **OpenRouter / Ollama** | Any open model | Varied | 🔗 [OpenRouter Keys](https://openrouter.ai/keys) or `localhost:11434` |
+| **Custom / Ollama** | Any local model | Free (Self-Hosted) | `http://localhost:11434/v1` |
 
 ---
 
@@ -62,17 +64,18 @@ You **never** need to commit API keys to your code. Manage them securely in GitH
 3. Under the **Repository secrets** section, click **New repository secret**.
 4. Add any keys you have:
    - Name: `GEMINI_API_KEY` | Secret: `AIzaSy...`
+   - Name: `GROQ_API_KEY` | Secret: `gsk_...`
+   - Name: `OPENROUTER_API_KEY` | Secret: `sk-or-v1-...`
    - Name: `OPENAI_API_KEY` | Secret: `sk-proj-...`
    - Name: `ANTHROPIC_API_KEY` | Secret: `sk-ant-...`
-   - Name: `GROQ_API_KEY` | Secret: `gsk_...`
    - Name: `DEEPSEEK_API_KEY` | Secret: `sk-...`
 
 #### Step B: Zero-Commit Model & Provider Control (GitHub Variables)
 Want to switch models or providers without editing your `.github/workflows` YAML or creating git commits?
 1. In **Settings** → **Secrets and variables** → **Actions**, click the **Variables** tab.
 2. Click **New repository variable**:
-   - Name: `PROVIDER` → Value: `gemini` (or `openai`, `anthropic`, `groq`, `deepseek`)
-   - Name: `MODEL` → Value: `gemini-2.5-pro` (or `gpt-4o`, `claude-3-5-sonnet`)
+   - Name: `PROVIDER` → Value: `gemini` (or `openrouter`, `openai`, `anthropic`, `groq`, `deepseek`)
+   - Name: `MODEL` → Value: `gemini-3.5-flash-lite` (or `gpt-4o`, `qwen/qwen-2.5-coder-32b-instruct`)
 3. Whenever you want to experiment with a new model or switch providers, simply update the variable value in GitHub settings. **ReviewGround picks it up on the very next PR run automatically!**
 
 ---
@@ -87,17 +90,18 @@ When multiple keys are provided without a preference, ReviewGround uses this bat
 
 | Priority Rank | Provider | Default Primary Model | Built-In Fallback Chain | Key Strength |
 |:---:|---|---|---|---|
-| **#1 (Default)** | **Google Gemini** | `gemini-3.5-flash-lite` | `gemini-3.1-flash-lite` ➔ `gemini-2.5-flash` | Live Google Search Tool Grounding |
+| **#1 (Default)** | **Google Gemini** | `gemini-3.5-flash-lite` | `gemini-3.1-flash-lite` ➔ `gemini-flash-latest` | Live Google Search Tool Grounding |
 | **#2** | **OpenAI** | `gpt-4o-mini` | `gpt-4o` | Precision DevSecOps & code analysis |
 | **#3** | **Anthropic Claude** | `claude-3-5-haiku` | `claude-3-5-sonnet` | Deep reasoning & architectural insight |
-| **#4** | **Groq LPU** | `llama-3.3-70b-versatile` | `qwen/qwen3.8-27b` ➔ `llama-3.1-8b-instant` | Blazing-fast LPU inference (under 3s) |
+| **#4** | **Groq LPU** | `qwen/qwen3.8-27b` | `openai/gpt-oss-120b` ➔ `openai/gpt-oss-20b` | Blazing-fast LPU inference (under 1s) |
 | **#5** | **DeepSeek** | `deepseek-chat` | `deepseek-reasoner` (R1) | Cost-effective reasoning & logic |
-| **#6** | **Custom / Ollama** | `llama3.2` | Configurable | Self-hosted & air-gapped endpoints |
+| **#6** | **OpenRouter** | `qwen/qwen-2.5-coder-32b-instruct` | `meta-llama/llama-3.3-70b-instruct` | 200+ models with dedicated routing |
+| **#7** | **Custom / Ollama** | `llama3.2` | Configurable | Self-hosted & air-gapped endpoints |
 
-#### ❓ How do you change the provider priority?
-You can promote any provider to #1 priority easily:
-1. **Zero-Commit (Recommended)**: In GitHub **Settings** ➔ **Secrets and variables** ➔ **Actions** ➔ **Variables**, set `PROVIDER: "groq"` or `PROVIDER: "openai"`.
-2. **In Workflow YAML**: Pass `provider: "anthropic"` under `with:` or `PROVIDER: "anthropic"` under `env:`.
+#### ❓ What if a model like Qwen or Llama is hosted on another third-party provider?
+ReviewGround features **Third-Party Host Preservation**:
+- If you specify `provider: 'openrouter'` or `provider: 'custom'` (pointing to Together AI, Fireworks, or Ollama), ReviewGround **NEVER hijacks or reroutes your Qwen or Llama model to Groq**. It executes strictly against your specified provider.
+- Models with organization namespaces (e.g. `qwen/qwen-2.5-coder-32b-instruct`, `meta-llama/llama-3.3-70b-instruct`) are correctly recognized as OpenRouter/Multi-host models.
 
 #### ❓ What happens if you specify a mismatched Provider and Model (e.g. Provider = Google, Model = DeepSeek)?
 ReviewGround features **Smart Mismatch Auto-Routing**:
@@ -139,9 +143,10 @@ jobs:
         env:
           # API Keys (Stored in Repository Secrets)
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           # Zero-Commit Dynamic Controls (Configured in Repository Variables)
           PROVIDER: ${{ vars.PROVIDER || '' }}
@@ -152,7 +157,7 @@ jobs:
 
 ---
 
-### Option 2: Minimal Gemini Setup (Free Tier)
+### Option 2: Minimal Gemini Setup (Free Tier & Search Grounded)
 
 ```yaml
 name: ReviewGround Gemini Review
@@ -182,10 +187,10 @@ jobs:
 
 ---
 
-### Option 3: Explicit Custom Model Override in YAML
+### Option 3: OpenRouter Setup (Access to 200+ Models)
 
 ```yaml
-name: ReviewGround Flagship Model Review
+name: ReviewGround OpenRouter Review
 
 on:
   pull_request:
@@ -207,14 +212,13 @@ jobs:
       - uses: arungupta1526/ReviewGround@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          provider: 'openai'
-          model: 'gpt-4o' # Custom model override takes highest priority!
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          model: 'qwen/qwen-2.5-coder-32b-instruct' # Or any model on OpenRouter!
 ```
 
 ---
 
-### Option 4: Local / Self-Hosted LLM (Ollama or OpenRouter)
+### Option 4: Local / Self-Hosted LLM (Ollama or Together AI)
 
 ```yaml
 name: ReviewGround Self-Hosted Review
@@ -240,9 +244,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           provider: 'custom'
-          llm-base-url: 'https://openrouter.ai/api/v1' # or http://localhost:11434/v1 for Ollama
-          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          model: 'meta-llama/llama-3.3-70b-instruct'
+          llm-base-url: 'http://localhost:11434/v1' # Or https://api.together.xyz/v1
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+          model: 'llama3.2'
 ```
 
 ---
@@ -295,9 +299,10 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Preferred Provider** | `provider` | `REVIEWGROUND_PROVIDER`, `PROVIDER`, `LLM_PROVIDER` | *Auto-detected* |
 | **Model Override** | `model` | `REVIEWGROUND_MODEL`, `MODEL`, `LLM_MODEL` | *Provider default* |
 | **Gemini API Key** | `gemini-api-key` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | — |
+| **Groq API Key** | `groq-api-key` | `GROQ_API_KEY` | — |
+| **OpenRouter API Key**| `openrouter-api-key`| `OPENROUTER_API_KEY` | — |
 | **OpenAI API Key** | `openai-api-key` | `OPENAI_API_KEY` | — |
 | **Anthropic API Key**| `anthropic-api-key` | `ANTHROPIC_API_KEY`, `CLAUDE_API_KEY` | — |
-| **Groq API Key** | `groq-api-key` | `GROQ_API_KEY` | — |
 | **DeepSeek API Key** | `deepseek-api-key` | `DEEPSEEK_API_KEY` | — |
 | **Custom Base URL** | `llm-base-url` | `LLM_BASE_URL`, `OPENAI_BASE_URL` | — |
 | **Custom API Key** | `llm-api-key` | `LLM_API_KEY` | — |

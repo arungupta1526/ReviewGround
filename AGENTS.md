@@ -27,6 +27,9 @@ This document establishes the mandatory architectural rules, Git workflows, secu
      - A bulleted description detailing *what* changed across files/modules.
      - The architectural rationale (*why*).
      - Verification confirmation (e.g., `npm run build` and unit test status).
+6. **Mandatory Post-Change README Walkthrough**:
+   - After completing ANY code modification, bug fix, or feature addition, the AI agent MUST perform a thorough review and walkthrough of `README.md`.
+   - Ensure complete documentation parity: all new inputs, environment variables, model defaults, provider capabilities, or workflow examples must be accurately reflected in `README.md`, regardless of whether README changes were explicitly requested.
 
 ---
 
@@ -73,11 +76,13 @@ This document establishes the mandatory architectural rules, Git workflows, secu
    - `GEMINI_API_KEY`: Uses Google Gemini (default `gemini-3.5-flash-lite` or `gemini-3.1-flash-lite`) with Google Search tool grounding (`tools: [{ googleSearch: {} }]`).
    - `OPENAI_API_KEY`: Uses OpenAI (default `gpt-4o-mini` or `gpt-4o`).
    - `ANTHROPIC_API_KEY`: Uses Anthropic Claude (default `claude-3-5-haiku` or `claude-3-5-sonnet`).
-   - `GROQ_API_KEY`: Uses Groq LPU (default `llama-3.3-70b-versatile` or `qwen/qwen3.8-27b`).
+   - `GROQ_API_KEY`: Uses Groq LPU (default `qwen/qwen3.8-27b`, with fallbacks `openai/gpt-oss-120b`, `openai/gpt-oss-20b`).
    - `DEEPSEEK_API_KEY`: Uses DeepSeek (default `deepseek-chat` or `deepseek-reasoner`).
-   - `LLM_BASE_URL` + `LLM_API_KEY`: Any OpenAI-compatible local or cloud endpoint (Ollama, OpenRouter).
-2. **Graceful Fallbacks**:
+   - `OPENROUTER_API_KEY`: Uses OpenRouter (default `qwen/qwen-2.5-coder-32b-instruct` or any model).
+   - `LLM_BASE_URL` + `LLM_API_KEY`: Any OpenAI-compatible local or cloud endpoint (Ollama, Together AI, Fireworks, vLLM).
+2. **Graceful Fallbacks & Reroute Protection**:
    - When a primary provider fails (rate limit, quota exceeded), automatically fail over to secondary configured keys without failing the entire CI workflow.
+   - If user explicitly chooses `provider: 'custom'` or `provider: 'openrouter'`, never hijack or reroute models to Groq.
 
 ---
 
