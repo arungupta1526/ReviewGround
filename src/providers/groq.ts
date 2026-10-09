@@ -3,8 +3,8 @@ import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
 export class GroqProvider implements LLMProvider {
   readonly id = 'groq' as const;
   readonly name = 'Groq LPU';
-  readonly defaultModel = 'llama-3.3-70b-versatile';
-  readonly fallbackModels = ['qwen/qwen3.8-27b', 'llama-3.1-8b-instant'];
+  readonly defaultModel = 'qwen/qwen3.8-27b';
+  readonly fallbackModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
 
   private apiKey: string;
 

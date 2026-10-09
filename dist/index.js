@@ -41528,7 +41528,7 @@ var GeminiProvider = class {
   id = "gemini";
   name = "Google Gemini";
   defaultModel = "gemini-3.5-flash-lite";
-  fallbackModels = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+  fallbackModels = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.GEMINI_API_KEY || "").trim();
@@ -41762,8 +41762,8 @@ var AnthropicProvider = class {
 var GroqProvider = class {
   id = "groq";
   name = "Groq LPU";
-  defaultModel = "llama-3.3-70b-versatile";
-  fallbackModels = ["qwen/qwen3.8-27b", "llama-3.1-8b-instant"];
+  defaultModel = "qwen/qwen3.8-27b";
+  fallbackModels = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.GROQ_API_KEY || "").trim();

@@ -19,7 +19,7 @@ export class GeminiProvider implements LLMProvider {
   readonly id = 'gemini' as const;
   readonly name = 'Google Gemini';
   readonly defaultModel = 'gemini-3.5-flash-lite';
-  readonly fallbackModels = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+  readonly fallbackModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
 
   private apiKey: string;
 
