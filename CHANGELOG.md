@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Paginated comment search — handles PRs with >100 comments without duplicate sticky comments
 - Visible warning when Groq provider truncates large diffs at 16,000 chars
 - Informational log when inline suggestion count is capped at 5
+- Verified competitive comparison matrix vs CodeRabbit, Qodo, PR-Agent, and Copilot in `README.md`
+- Expanded Mermaid end-to-end workflow architecture diagram with repository guidelines, merge gates, and extra stages in `README.md`
 
 ### Fixed
 - **TypeScript Node Globals Resolution**: Added `"types": ["node"]` to `tsconfig.json` compilerOptions to guarantee global `process`, `console`, and `fetch` type declarations under NodeNext ESM packages (e.g. `@actions/core` v3)
