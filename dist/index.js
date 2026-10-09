@@ -40375,7 +40375,7 @@ ${truncatedDiff}
       const runId = config2.runId || process.env.GITHUB_RUN_ID;
       const runUrl = runId && repo ? `https://github.com/${repo}/actions/runs/${runId}` : "";
       const runLink = runUrl ? `[View GitHub Actions Run Logs](${runUrl})` : "check the GitHub Actions workflow logs";
-      const errorNotice = `## \u{1F916} AI Code Review Notice
+      const errorNotice = `## \u{1F6E1}\uFE0F ReviewGround AI Code Review Notice
 
 > [!WARNING]
 > **AI Review Generation Failed**
@@ -40415,7 +40415,7 @@ ${truncatedDiff}
   }
   const groundingBadge = response.searchGroundingUsed ? " \u{1F310} *Live Search Grounded*" : "";
   const engineString = `${response.provider} (${response.model})${groundingBadge}`;
-  const markdownOutput = `## \u{1F916} AI Code Review & Security Analysis
+  const markdownOutput = `## \u{1F6E1}\uFE0F ReviewGround AI Code Review & Security Analysis
 *Reviewer Engine: ${engineString}*
 
 ${cleanReviewText}

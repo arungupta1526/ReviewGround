@@ -15,6 +15,29 @@
 *Stop paying $50/seat/month for proprietary AI code review bots.*  
 **ReviewGround** brings enterprise-grade AI code review, live package registry grounding, 1-click commit suggestions, and sticky CI summaries directly to your repository with your own API keys.
 
+<br/>
+
+<details>
+<summary><b>📸 Click to View Live PR Code Review & CI Summary Screenshots</b></summary>
+<br/>
+
+<p align="center">
+  <b>1. Sticky PR Comment: ReviewGround AI Code Review & Post-CI Pipeline Verification</b><br/>
+  <img src="./images/pr-sticky-review-comment.png" alt="ReviewGround Sticky PR Review Comment" width="850" />
+</p>
+
+<p align="center">
+  <b>2. PR Description Auto-Update: 🟢 Risk Level Badge & Summary</b><br/>
+  <img src="./images/pr-description-risk-badge.png" alt="ReviewGround PR Description Auto-Update" width="850" />
+</p>
+
+<p align="center">
+  <b>3. Single Sticky Comment Pattern (In-Place PATCH History)</b><br/>
+  <img src="./images/pr-sticky-patch-history.png" alt="ReviewGround Single Sticky Comment History" width="850" />
+</p>
+
+</details>
+
 ---
 
 </div>
