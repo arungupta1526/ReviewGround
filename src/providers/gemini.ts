@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 interface GeminiApiCandidate {
   content?: {
@@ -57,11 +58,10 @@ export class GeminiProvider implements LLMProvider {
     }
 
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(25000),
       });
 
       if (!res.ok) {

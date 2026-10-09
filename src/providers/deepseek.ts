@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 export class DeepSeekProvider implements LLMProvider {
   readonly id = 'deepseek' as const;
@@ -26,7 +27,7 @@ export class DeepSeekProvider implements LLMProvider {
   ): Promise<{ text: string | null; reasoning?: string }> {
     const url = `${this.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -47,8 +48,7 @@ export class DeepSeekProvider implements LLMProvider {
           ...(model.includes('reasoner') ? {} : { temperature }),
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(30000),
-      });
+      }, 2, 30000);
 
       if (!res.ok) {
         const errText = await res.text();

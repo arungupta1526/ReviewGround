@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 export class CustomProvider implements LLMProvider {
   readonly id = 'custom' as const;
@@ -33,7 +34,7 @@ export class CustomProvider implements LLMProvider {
 
     try {
       console.log(`⚡ [ReviewGround] Calling Custom OpenAI-compatible endpoint (${this.baseUrl}, model: '${model}')...`);
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -51,8 +52,7 @@ export class CustomProvider implements LLMProvider {
           temperature: options.temperature ?? 0.2,
           max_tokens: options.maxTokens ?? 2048,
         }),
-        signal: AbortSignal.timeout(35000),
-      });
+      }, 2, 35000);
 
       if (!res.ok) {
         const errText = await res.text();

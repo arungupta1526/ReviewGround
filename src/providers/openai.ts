@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 export class OpenAIProvider implements LLMProvider {
   readonly id = 'openai' as const;
@@ -26,7 +27,7 @@ export class OpenAIProvider implements LLMProvider {
   ): Promise<string | null> {
     const url = `${this.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -47,7 +48,6 @@ export class OpenAIProvider implements LLMProvider {
           temperature,
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(25000),
       });
 
       if (!res.ok) {

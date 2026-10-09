@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 export class GroqProvider implements LLMProvider {
   readonly id = 'groq' as const;
@@ -39,7 +40,7 @@ export class GroqProvider implements LLMProvider {
         : prompt;
 
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -60,7 +61,6 @@ export class GroqProvider implements LLMProvider {
           temperature,
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(25000),
       });
 
       if (!res.ok) {

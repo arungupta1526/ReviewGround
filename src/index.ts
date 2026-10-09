@@ -113,6 +113,9 @@ async function run(): Promise<void> {
               .map((s) => s.trim())
               .filter(Boolean)
           : undefined,
+        reviewLanguage: getOptionalInput('review-language', ['REVIEWGROUND_REVIEW_LANGUAGE', 'REVIEW_LANGUAGE']) || 'en',
+        enablePrDescriptionUpdate: getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
+        enableCheckRun: getBooleanInput('enable-check-run', ['ENABLE_CHECK_RUN'], false),
       };
 
       console.log('\n--- 🤖 Starting AI Code Review ---');
@@ -132,6 +135,7 @@ async function run(): Promise<void> {
         auditResult: getOptionalInput('audit-result', ['AUDIT_RESULT']) || undefined,
         buildResult: getOptionalInput('build-result', ['BUILD_RESULT']) || undefined,
         testResult: getOptionalInput('test-result', ['TEST_RESULT']) || undefined,
+        extraStages: getOptionalInput('extra-stages', ['REVIEWGROUND_EXTRA_STAGES', 'EXTRA_STAGES']) || undefined,
       };
 
       console.log('\n--- 📊 Starting Post-CI Summary ---');

@@ -1,4 +1,5 @@
 import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
+import { fetchWithRetry } from '../utils/fetchWithRetry.js';
 
 interface AnthropicApiResponse {
   content?: Array<{
@@ -39,7 +40,7 @@ export class AnthropicProvider implements LLMProvider {
   ): Promise<string | null> {
     const url = 'https://api.anthropic.com/v1/messages';
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'x-api-key': this.apiKey,
@@ -58,7 +59,6 @@ export class AnthropicProvider implements LLMProvider {
           temperature,
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(25000),
       });
 
       if (!res.ok) {

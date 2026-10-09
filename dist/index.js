@@ -39226,6 +39226,27 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
+// src/utils/fetchWithRetry.ts
+async function fetchWithRetry(url2, init = {}, retries = 2, timeoutMs = 25e3) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url2, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        const backoffMs = 50 * Math.pow(2, attempt) + Math.random() * 100;
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // src/providers/gemini.ts
 var GeminiProvider = class {
   id = "gemini";
@@ -39257,11 +39278,10 @@ var GeminiProvider = class {
       requestBody.tools = [{ googleSearch: {} }];
     }
     try {
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(25e3)
+        body: JSON.stringify(requestBody)
       });
       if (!res.ok) {
         if (withTools) {
@@ -39337,7 +39357,7 @@ var OpenAIProvider = class {
   async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
     const url2 = `${this.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -39357,8 +39377,7 @@ var OpenAIProvider = class {
           ],
           temperature,
           max_tokens: maxTokens
-        }),
-        signal: AbortSignal.timeout(25e3)
+        })
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -39417,7 +39436,7 @@ var AnthropicProvider = class {
   async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
     const url2 = "https://api.anthropic.com/v1/messages";
     try {
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers: {
           "x-api-key": this.apiKey,
@@ -39435,8 +39454,7 @@ var AnthropicProvider = class {
           ],
           temperature,
           max_tokens: maxTokens
-        }),
-        signal: AbortSignal.timeout(25e3)
+        })
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -39503,7 +39521,7 @@ var GroqProvider = class {
       return prompt.slice(0, 16e3) + "\n\n...[diff truncated for Groq context window limit]";
     })() : prompt;
     try {
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -39523,8 +39541,7 @@ var GroqProvider = class {
           ],
           temperature,
           max_tokens: maxTokens
-        }),
-        signal: AbortSignal.timeout(25e3)
+        })
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -39586,7 +39603,7 @@ var DeepSeekProvider = class {
   async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
     const url2 = `${this.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -39606,9 +39623,8 @@ var DeepSeekProvider = class {
           ],
           ...model.includes("reasoner") ? {} : { temperature },
           max_tokens: maxTokens
-        }),
-        signal: AbortSignal.timeout(3e4)
-      });
+        })
+      }, 2, 3e4);
       if (!res.ok) {
         const errText = await res.text();
         console.warn(`\u26A0\uFE0F DeepSeek API model '${model}' returned HTTP ${res.status}: ${errText.slice(0, 200)}`);
@@ -39672,7 +39688,7 @@ var OpenRouterProvider = class {
   async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
     const url2 = `${this.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -39694,9 +39710,8 @@ var OpenRouterProvider = class {
           ],
           temperature,
           max_tokens: maxTokens
-        }),
-        signal: AbortSignal.timeout(35e3)
-      });
+        })
+      }, 2, 35e3);
       if (!res.ok) {
         const errText = await res.text();
         console.warn(`\u26A0\uFE0F OpenRouter model '${model}' returned HTTP ${res.status}: ${errText.slice(0, 200)}`);
@@ -39760,7 +39775,7 @@ var CustomProvider = class {
     }
     try {
       console.log(`\u26A1 [ReviewGround] Calling Custom OpenAI-compatible endpoint (${this.baseUrl}, model: '${model}')...`);
-      const res = await fetch(url2, {
+      const res = await fetchWithRetry(url2, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -39777,9 +39792,8 @@ var CustomProvider = class {
           ],
           temperature: options.temperature ?? 0.2,
           max_tokens: options.maxTokens ?? 2048
-        }),
-        signal: AbortSignal.timeout(35e3)
-      });
+        })
+      }, 2, 35e3);
       if (!res.ok) {
         const errText = await res.text();
         console.warn(`\u26A0\uFE0F Custom API endpoint returned HTTP ${res.status}: ${errText.slice(0, 200)}`);
@@ -40229,10 +40243,82 @@ ${content}
       }
     }
   }
-  const prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+  const lang = (config2.reviewLanguage || "en").toLowerCase().trim();
+  const languageInstruction = lang !== "en" && lang !== "english" ? `
+IMPORTANT: Write your entire review response in the following language: ${lang}.
+` : "";
+  const activeProviderName = (config2.provider || "").toLowerCase();
+  let prompt;
+  if (activeProviderName === "anthropic" || (config2.model || "").toLowerCase().startsWith("claude")) {
+    prompt = `<instructions>
+You are a Principal Software Engineer &amp; DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+If the code looks solid and has no issues at this review level, respond with "\u2705 All changes look clean, performant, and secure!" and a brief 2-bullet summary.
+
+If you propose specific line-level code replacements, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions:
+\`\`\`inline_suggestions
+[{ "path": "path/to/file.ts", "line": 42, "suggestion": "  exact line replacement" }]
+\`\`\`
+</instructions>
+
+<diff>
+${truncatedDiff}
+</diff>
+`;
+  } else if (activeProviderName === "gemini" || (config2.model || "").toLowerCase().startsWith("gemini")) {
+    prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+
+Task: Analyze the git diff below and produce a structured code review.
+
+Review focus:
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+Response format:
+- Start with a brief executive summary (1-2 sentences).
+- Use markdown sections (## Bugs, ## Security, ## Performance, etc.) as appropriate for this review level.
+- If code looks clean, respond: "\u2705 All changes look clean, performant, and secure!" plus 2-bullet summary.
+- If you have specific line replacements, append a JSON block at the end:
+
+\`\`\`inline_suggestions
+[{ "path": "path/to/file.ts", "line": 42, "suggestion": "  exact line replacement" }]
+\`\`\`
+
+Git Diff:
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+`;
+  } else if (activeProviderName === "groq" || (config2.model || "").toLowerCase().startsWith("qwen") || (config2.model || "").toLowerCase().startsWith("llama")) {
+    prompt = `## Role
+You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+
+## Task
+Analyze the following git diff.
+
+## Review Focus
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+## Instructions
+- If the code is clean, say: "\u2705 All changes look clean, performant, and secure!" followed by 2 bullet points.
+- Otherwise, list findings grouped under ### headers (Bugs, Security, Performance, etc.).
+- For specific line fixes, append at the very end:
+
+\`\`\`inline_suggestions
+[{ "path": "path/to/file.ts", "line": 42, "suggestion": "  exact line replacement" }]
+\`\`\`
+
+## Git Diff
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+`;
+  } else {
+    prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+Analyze the following git diff for:
+${focusInstructions}
+${packageGroundTruthNote}${customGuidelines}${languageInstruction}
 If the code looks solid and has no issues at this review level, respond with "\u2705 All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
@@ -40251,6 +40337,7 @@ Git Diff:
 ${truncatedDiff}
 \`\`\`
 `;
+  }
   const reviewOptions = {
     model: config2.model,
     fallbackModels: config2.fallbackModels,
@@ -40306,7 +40393,120 @@ ${cleanReviewText}
   if (config2.enableInlineSuggestions !== false && token && repo && prNumber && inlineSuggestions.length > 0) {
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
   }
+  if (config2.enablePrDescriptionUpdate && token && repo && prNumber) {
+    await updatePrDescription(cleanReviewText, token, repo, prNumber);
+  }
+  if (config2.enableCheckRun && token && repo && prNumber) {
+    await createCheckRun(cleanReviewText, token, repo, prNumber);
+  }
   return response;
+}
+async function updatePrDescription(reviewText, token, repo, prNumber) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "ReviewGround-CI-Reviewer",
+    "Content-Type": "application/json"
+  };
+  try {
+    const prRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, { headers });
+    if (!prRes.ok) {
+      console.warn(`\u26A0\uFE0F [F1] Could not fetch PR for description update: HTTP ${prRes.status}`);
+      return;
+    }
+    const prData = await prRes.json();
+    const originalBody = prData.body || "";
+    const lowerReview = reviewText.toLowerCase();
+    const hasCritical = lowerReview.includes("critical") || lowerReview.includes("security") || lowerReview.includes("vulnerability") || lowerReview.includes("injection") || lowerReview.includes("xss");
+    const hasMedium = lowerReview.includes("performance") || lowerReview.includes("memory") || lowerReview.includes("leak") || lowerReview.includes("warning");
+    const riskBadge = hasCritical ? "\u{1F534} **Risk Level: HIGH** \u2014 Critical issues require attention before merge." : hasMedium ? "\u{1F7E1} **Risk Level: MEDIUM** \u2014 Performance or style improvements suggested." : "\u{1F7E2} **Risk Level: LOW** \u2014 Changes look clean and safe to merge.";
+    const DESCRIPTION_TAG = "<!-- reviewground-pr-description -->";
+    const aiSection = `
+
+---
+
+### \u{1F916} ReviewGround AI Summary
+
+${riskBadge}
+
+> *Auto-generated by [ReviewGround](https://github.com/arungupta1526/reviewground). Remove this section if not needed.*
+
+${DESCRIPTION_TAG}`;
+    let newBody;
+    if (originalBody.includes(DESCRIPTION_TAG)) {
+      newBody = originalBody.replace(
+        /\n\n---\n\n### 🤖 ReviewGround AI Summary[\s\S]*?<!-- reviewground-pr-description -->/,
+        aiSection
+      );
+    } else {
+      newBody = originalBody + aiSection;
+    }
+    const updateRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ body: newBody })
+    });
+    if (updateRes.ok) {
+      console.log(`\u2705 [F1] Updated PR #${prNumber} description with AI summary and risk badge.`);
+    } else {
+      console.warn(`\u26A0\uFE0F [F1] Could not update PR description: HTTP ${updateRes.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`\u26A0\uFE0F [F1] Error updating PR description: ${msg}`);
+  }
+}
+async function createCheckRun(reviewText, token, repo, prNumber) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "ReviewGround-CI-Reviewer",
+    "Content-Type": "application/json"
+  };
+  try {
+    const prRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, { headers });
+    if (!prRes.ok) {
+      console.warn(`\u26A0\uFE0F [F3] Could not fetch PR SHA for check run: HTTP ${prRes.status}`);
+      return;
+    }
+    const prData = await prRes.json();
+    const headSha = prData.head?.sha;
+    if (!headSha) {
+      console.warn("\u26A0\uFE0F [F3] No HEAD SHA found on PR. Skipping check run creation.");
+      return;
+    }
+    const lowerReview = reviewText.toLowerCase();
+    const hasCriticalIssues = lowerReview.includes("critical") || lowerReview.includes("vulnerability") || lowerReview.includes("security risk") || lowerReview.includes("injection") || lowerReview.includes("secret leak");
+    const conclusion = hasCriticalIssues ? "failure" : "success";
+    const title = hasCriticalIssues ? "ReviewGround: Critical issues found \u2014 review required" : "ReviewGround: Code review passed";
+    const summary2 = hasCriticalIssues ? "ReviewGround detected critical security or correctness issues in this PR. Please address them before merging." : "ReviewGround AI review completed. No critical issues were found in this PR.";
+    const checkRes = await fetch(`https://api.github.com/repos/${repo}/check-runs`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: "ReviewGround AI Review",
+        head_sha: headSha,
+        status: "completed",
+        conclusion,
+        output: {
+          title,
+          summary: summary2,
+          text: reviewText.slice(0, 65535)
+          // GitHub Check Run output limit
+        }
+      })
+    });
+    if (checkRes.ok) {
+      console.log(`\u2705 [F3] GitHub Check Run created (conclusion: ${conclusion}) for PR #${prNumber}.`);
+    } else {
+      const errText = await checkRes.text();
+      console.warn(`\u26A0\uFE0F [F3] Could not create Check Run: HTTP ${checkRes.status} \u2014 ${errText.slice(0, 200)}`);
+      console.warn("\u2139\uFE0F  Ensure the workflow has `checks: write` permission for GitHub Check Run gate.");
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`\u26A0\uFE0F [F3] Error creating Check Run: ${msg}`);
+  }
 }
 
 // src/summary.ts
@@ -40376,7 +40576,7 @@ async function fetchStageDurations(repo, runId, token) {
   }
   return durations;
 }
-function buildCiSummaryMarkdown(gitleaks, audit, build, test, durations, runId, repo) {
+function buildCiSummaryMarkdown(gitleaks, audit, build, test, durations, runId, repo, extraStagesJson) {
   const gBadge = getStatusBadge(gitleaks);
   const aBadge = getStatusBadge(audit);
   const bBadge = getStatusBadge(build);
@@ -40404,6 +40604,23 @@ Please check logs and apply required fixes before merging.`;
   } else {
     verdict = `\u26A0\uFE0F **CI finished with status: Gitleaks (${gitleaks}), Audit (${audit}), Build (${build}), Tests (${test}).** ${runLinkText}`;
   }
+  let extraRows = "";
+  if (extraStagesJson) {
+    try {
+      const parsed = JSON.parse(extraStagesJson);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((stage, idx) => {
+          const badge = getStatusBadge(stage.result);
+          const key = `extra_${stage.name.toLowerCase().replace(/\s+/g, "_")}`;
+          const dur = durations[key] ? `\`${durations[key]}\`` : "\u2014";
+          extraRows += `
+| \u{1F539} **${4 + idx + 1}. ${stage.name}** | ${badge.icon} ${badge.text} | ${dur} | Custom CI stage |`;
+        });
+      }
+    } catch {
+      console.warn("\u26A0\uFE0F [ReviewGround] Could not parse extra-stages JSON \u2014 skipping extra rows.");
+    }
+  }
   return `${CI_SECTION_HEADER}
 
 | Pipeline Stage | Status | Duration | Verification Summary |
@@ -40411,7 +40628,7 @@ Please check logs and apply required fixes before merging.`;
 | \u{1F40D} **1. Gitleaks Secret Scan** | ${gBadge.icon} ${gBadge.text} | ${gDur} | Secret, token & credential leak detection |
 | \u{1F40D} **2. Dependency Audit** | ${aBadge.icon} ${aBadge.text} | ${aDur} | Security vulnerability & zero-CVE audit |
 | \u{1F40D} **3. Build & Compilation** | ${bBadge.icon} ${bBadge.text} | ${bDur} | Clean build compilation & type safety |
-| \u{1F40D} **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |
+| \u{1F40D} **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |${extraRows}
 
 ${verdict}`;
 }
@@ -40533,7 +40750,8 @@ async function runSummary(config2 = {}) {
     test,
     durations,
     runId,
-    repo
+    repo,
+    config2.extraStages
   );
   console.log("\n================== \u{1F6A6} CI SUMMARY ==================\n");
   console.log(summaryMarkdown);
@@ -40638,7 +40856,10 @@ async function run() {
         openrouterApiKey: getOptionalInput("openrouter-api-key", ["OPENROUTER_API_KEY"]) || void 0,
         llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL"]) || void 0,
         llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY"]) || void 0,
-        fallbackModels: getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]) ? getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]).split(",").map((s) => s.trim()).filter(Boolean) : void 0
+        fallbackModels: getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]) ? getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]).split(",").map((s) => s.trim()).filter(Boolean) : void 0,
+        reviewLanguage: getOptionalInput("review-language", ["REVIEWGROUND_REVIEW_LANGUAGE", "REVIEW_LANGUAGE"]) || "en",
+        enablePrDescriptionUpdate: getBooleanInput("enable-pr-description-update", ["ENABLE_PR_DESCRIPTION_UPDATE"], false),
+        enableCheckRun: getBooleanInput("enable-check-run", ["ENABLE_CHECK_RUN"], false)
       };
       console.log("\n--- \u{1F916} Starting AI Code Review ---");
       const reviewResult = await runReview(reviewConfig);
@@ -40654,7 +40875,8 @@ async function run() {
         gitleaksResult: getOptionalInput("gitleaks-result", ["GITLEAKS_RESULT"]) || void 0,
         auditResult: getOptionalInput("audit-result", ["AUDIT_RESULT"]) || void 0,
         buildResult: getOptionalInput("build-result", ["BUILD_RESULT"]) || void 0,
-        testResult: getOptionalInput("test-result", ["TEST_RESULT"]) || void 0
+        testResult: getOptionalInput("test-result", ["TEST_RESULT"]) || void 0,
+        extraStages: getOptionalInput("extra-stages", ["REVIEWGROUND_EXTRA_STAGES", "EXTRA_STAGES"]) || void 0
       };
       console.log("\n--- \u{1F4CA} Starting Post-CI Summary ---");
       const summaryMarkdown = await runSummary(summaryConfig);

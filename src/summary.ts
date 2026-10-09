@@ -18,6 +18,10 @@ export interface SummaryConfig {
   buildResult?: string;
   testResult?: string;
   commentTag?: string;
+  /** Optional extra CI stages beyond the default 4.
+   * JSON string: [{"name":"Deploy","result":"success"},{"name":"E2E","result":"failure"}]
+   */
+  extraStages?: string;
 }
 
 export interface StageDurations {
@@ -123,7 +127,8 @@ export function buildCiSummaryMarkdown(
   test: string,
   durations: StageDurations,
   runId?: string,
-  repo?: string
+  repo?: string,
+  extraStagesJson?: string
 ): string {
   const gBadge = getStatusBadge(gitleaks);
   const aBadge = getStatusBadge(audit);
@@ -168,6 +173,25 @@ export function buildCiSummaryMarkdown(
     verdict = `⚠️ **CI finished with status: Gitleaks (${gitleaks}), Audit (${audit}), Build (${build}), Tests (${test}).** ${runLinkText}`;
   }
 
+  // Parse optional extra stages from JSON string
+  interface ExtraStage { name: string; result: string; }
+  let extraRows = '';
+  if (extraStagesJson) {
+    try {
+      const parsed = JSON.parse(extraStagesJson) as ExtraStage[];
+      if (Array.isArray(parsed)) {
+        parsed.forEach((stage, idx) => {
+          const badge = getStatusBadge(stage.result);
+          const key = `extra_${stage.name.toLowerCase().replace(/\s+/g, '_')}`;
+          const dur = durations[key] ? `\`${durations[key]}\`` : '—';
+          extraRows += `\n| 🔹 **${4 + idx + 1}. ${stage.name}** | ${badge.icon} ${badge.text} | ${dur} | Custom CI stage |`;
+        });
+      }
+    } catch {
+      console.warn('⚠️ [ReviewGround] Could not parse extra-stages JSON — skipping extra rows.');
+    }
+  }
+
   return `${CI_SECTION_HEADER}
 
 | Pipeline Stage | Status | Duration | Verification Summary |
@@ -175,7 +199,7 @@ export function buildCiSummaryMarkdown(
 | 🐍 **1. Gitleaks Secret Scan** | ${gBadge.icon} ${gBadge.text} | ${gDur} | Secret, token & credential leak detection |
 | 🐍 **2. Dependency Audit** | ${aBadge.icon} ${aBadge.text} | ${aDur} | Security vulnerability & zero-CVE audit |
 | 🐍 **3. Build & Compilation** | ${bBadge.icon} ${bBadge.text} | ${bDur} | Clean build compilation & type safety |
-| 🐍 **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |
+| 🐍 **4. Test Verification** | ${tBadge.icon} ${tBadge.text} | ${tDur} | Unit tests & invariant suites |${extraRows}
 
 ${verdict}`;
 }
@@ -304,7 +328,8 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
     test,
     durations,
     runId,
-    repo
+    repo,
+    config.extraStages
   );
 
   // 1. Output to console
