@@ -1,0 +1,117 @@
+name: 'ReviewGround - AI Code Reviewer & CI Verification'
+description: 'Universal AI Code Reviewer with multi-provider BYOK (Gemini, OpenAI, Claude, Groq, DeepSeek), 1-click commit suggestions, live npm registry grounding, and sticky CI summaries.'
+author: 'ReviewGround'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  github-token:
+    description: 'GitHub token with pull-requests:write permission for posting PR reviews and suggestions'
+    required: false
+    default: '${{ github.token }}'
+
+  mode:
+    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), or "all" (both)'
+    required: false
+    default: 'all'
+
+  provider:
+    description: 'Preferred AI provider ("gemini", "openai", "anthropic", "groq", "deepseek", "custom"). Auto-detected if omitted.'
+    required: false
+
+  model:
+    description: 'Custom model name override for selected provider'
+    required: false
+
+  gemini-api-key:
+    description: 'Google Gemini API key (supports Gemini 2.5 Flash / Flash-Lite with Search Grounding)'
+    required: false
+
+  openai-api-key:
+    description: 'OpenAI API key (supports GPT-4o / GPT-4o-mini)'
+    required: false
+
+  anthropic-api-key:
+    description: 'Anthropic API key (supports Claude 3.5 Sonnet / Haiku)'
+    required: false
+
+  groq-api-key:
+    description: 'Groq API key (supports Llama 3.3 70B / Qwen 3.8)'
+    required: false
+
+  deepseek-api-key:
+    description: 'DeepSeek API key (supports DeepSeek V3 / R1)'
+    required: false
+
+  llm-base-url:
+    description: 'Custom OpenAI-compatible base URL (e.g. http://localhost:11434/v1 for Ollama, or OpenRouter)'
+    required: false
+
+  llm-api-key:
+    description: 'API key for custom endpoint (optional for local Ollama)'
+    required: false
+
+  enable-search-grounding:
+    description: 'Enable Google Search tool grounding for Gemini (default true)'
+    required: false
+    default: 'true'
+
+  enable-inline-suggestions:
+    description: 'Post 1-click interactive commit suggestion buttons directly on code diffs (default true)'
+    required: false
+    default: 'true'
+
+  enable-npm-verify:
+    description: 'Verify package updates against live npm registry to eliminate version hallucinations (default true)'
+    required: false
+    default: 'true'
+
+  base-branch:
+    description: 'Base branch to compare diff against (default main)'
+    required: false
+    default: 'main'
+
+  comment-tag:
+    description: 'HTML comment tag used to identify sticky PR comments'
+    required: false
+    default: '<!-- reviewground-code-review -->'
+
+  pr-number:
+    description: 'Pull Request number (auto-detected from workflow event if omitted)'
+    required: false
+
+  gitleaks-result:
+    description: 'Outcome of Gitleaks stage (e.g. ${{ needs.gitleaks.result }})'
+    required: false
+
+  audit-result:
+    description: 'Outcome of dependency audit stage (e.g. ${{ needs.security-audit.result }})'
+    required: false
+
+  build-result:
+    description: 'Outcome of build stage (e.g. ${{ needs.build.result }})'
+    required: false
+
+  test-result:
+    description: 'Outcome of test stage (e.g. ${{ needs.test.result }})'
+    required: false
+
+  run-id:
+    description: 'GitHub Actions workflow run ID for duration calculation'
+    required: false
+    default: '${{ github.run_id }}'
+
+outputs:
+  reviewed:
+    description: 'Whether an AI code review was generated ("true" or "false")'
+  reviewer-engine:
+    description: 'Name and model of the AI provider that generated the review'
+  summarized:
+    description: 'Whether the CI pipeline summary was generated ("true" or "false")'
+  summary-markdown:
+    description: 'Rendered markdown table of CI pipeline results and durations'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'

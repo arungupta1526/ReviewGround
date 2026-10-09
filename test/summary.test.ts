@@ -1,0 +1,59 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import {
+  formatDuration,
+  getStatusBadge,
+  buildCiSummaryMarkdown,
+} from '../src/summary.js';
+
+describe('CI Summary & Duration Tracking', () => {
+  it('formats milliseconds into human-readable duration strings', () => {
+    assert.strictEqual(formatDuration(0), '—');
+    assert.strictEqual(formatDuration(-100), '—');
+    assert.strictEqual(formatDuration(9400), '9s');
+    assert.strictEqual(formatDuration(24100), '24s');
+    assert.strictEqual(formatDuration(60000), '1m');
+    assert.strictEqual(formatDuration(90000), '1m 30s');
+    assert.strictEqual(formatDuration(125000), '2m 5s');
+  });
+
+  it('maps CI status results to icons and badges', () => {
+    assert.deepStrictEqual(getStatusBadge('success'), { icon: '✅', text: 'Passed' });
+    assert.deepStrictEqual(getStatusBadge('failure'), { icon: '❌', text: 'Failed' });
+    assert.deepStrictEqual(getStatusBadge('cancelled'), { icon: '⚠️', text: 'Cancelled' });
+    assert.deepStrictEqual(getStatusBadge('skipped'), { icon: '⚪', text: 'Skipped' });
+    assert.deepStrictEqual(getStatusBadge(''), { icon: '❓', text: 'Unknown' });
+  });
+
+  it('builds passing CI summary markdown table with run link', () => {
+    const md = buildCiSummaryMarkdown(
+      'success',
+      'success',
+      'success',
+      'success',
+      { gitleaks: '9s', audit: '12s', build: '35s', test: '18s' },
+      '123456',
+      'owner/repo'
+    );
+
+    assert.ok(md.includes('### 🚦 CI Pipeline Results & Verification'));
+    assert.ok(md.includes('| 🐍 **1. Gitleaks Secret Scan** | ✅ Passed | `9s` |'));
+    assert.ok(md.includes('| 🐍 **2. Dependency Audit** | ✅ Passed | `12s` |'));
+    assert.ok(md.includes('| 🐍 **3. Build & Compilation** | ✅ Passed | `35s` |'));
+    assert.ok(md.includes('| 🐍 **4. Test Verification** | ✅ Passed | `18s` |'));
+    assert.ok(md.includes('🎉 **All CI checks passed successfully!'));
+    assert.ok(md.includes('https://github.com/owner/repo/actions/runs/123456'));
+  });
+
+  it('builds failing CI summary markdown with specific failure names', () => {
+    const md = buildCiSummaryMarkdown(
+      'success',
+      'failure',
+      'cancelled',
+      'skipped',
+      { gitleaks: '8s' }
+    );
+
+    assert.ok(md.includes('❌ **CI Pipeline failed at: Dependency Audit.**'));
+  });
+});

@@ -1,0 +1,50 @@
+{
+  "name": "reviewground",
+  "version": "1.0.0",
+  "description": "Universal AI Code Reviewer & Post-CI Verification GitHub Action with Multi-Provider BYOK, Live Registry Search Grounding, 1-Click Suggestions, and Sticky Comments.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arungupta1526/ReviewGround.git"
+  },
+  "keywords": [
+    "github-action",
+    "ai-code-reviewer",
+    "code-review",
+    "devsecops",
+    "gemini",
+    "openai",
+    "anthropic",
+    "groq",
+    "deepseek",
+    "ollama",
+    "inline-suggestions",
+    "sticky-comment"
+  ],
+  "author": "ReviewGround",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "undici": "^6.28.2",
+    "@fastify/busboy": "^3.2.3"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
