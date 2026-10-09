@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0](https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0) (2026-10-09)
+
+
+### Features
+
+* dynamic CI job discovery, smart CI auto-skip, clear error notices, and Google Release Please ([3eaf670](https://github.com/arungupta1526/ReviewGround/commit/3eaf670f82f48aceb265e741ee0df6273e6b4fcb))
+* **reviewer:** brand review header with ReviewGround and add collapsible demo screenshots to README ([2a765db](https://github.com/arungupta1526/ReviewGround/commit/2a765db9fecad57e83f8a0f060cb17eac8dc4e18))
+* **summary:** add dynamic CI workflow job discovery and secret aliases ([71177de](https://github.com/arungupta1526/ReviewGround/commit/71177def048863acd8110134df8751bf24b053cd))
+* **summary:** add smart CI table auto-skip and clear PR setup/error notices ([a8dfbed](https://github.com/arungupta1526/ReviewGround/commit/a8dfbed25d7717326dbb3b121254f25e51796dc2))
+
 ## [Unreleased]
 
 ### Added
