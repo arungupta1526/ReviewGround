@@ -4,6 +4,7 @@ import { OpenAIProvider } from './openai.js';
 import { AnthropicProvider } from './anthropic.js';
 import { GroqProvider } from './groq.js';
 import { DeepSeekProvider } from './deepseek.js';
+import { OpenRouterProvider } from './openrouter.js';
 import { CustomProvider } from './custom.js';
 
 export * from './types.js';
@@ -12,6 +13,7 @@ export { OpenAIProvider } from './openai.js';
 export { AnthropicProvider } from './anthropic.js';
 export { GroqProvider } from './groq.js';
 export { DeepSeekProvider } from './deepseek.js';
+export { OpenRouterProvider } from './openrouter.js';
 export { CustomProvider } from './custom.js';
 
 export interface ProviderManagerConfig {
@@ -21,6 +23,7 @@ export interface ProviderManagerConfig {
   anthropicApiKey?: string;
   groqApiKey?: string;
   deepseekApiKey?: string;
+  openrouterApiKey?: string;
   llmBaseUrl?: string;
   llmApiKey?: string;
 }
@@ -31,11 +34,20 @@ export interface ProviderManagerConfig {
 export function detectProviderFromModel(modelName?: string): ProviderName | null {
   if (!modelName) return null;
   const lower = modelName.trim().toLowerCase();
+
   if (lower.startsWith('gemini')) return 'gemini';
   if (lower.startsWith('gpt-') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('chatgpt')) return 'openai';
   if (lower.startsWith('claude')) return 'anthropic';
-  if (lower.startsWith('deepseek')) return 'deepseek';
-  if (lower.startsWith('llama') || lower.startsWith('qwen') || lower.startsWith('mixtral')) return 'groq';
+  if (lower === 'qwen/qwen3.8-27b' || lower.startsWith('openai/gpt-oss')) return 'groq';
+  if (lower.startsWith('deepseek') && !lower.includes('/')) return 'deepseek';
+
+  // Vendor-namespaced models (e.g. qwen/qwen-2.5-coder-32b-instruct, meta-llama/llama-3.3-70b-instruct)
+  // or models with :free tag are OpenRouter / multi-host slugs
+  if (lower.includes('/') || lower.endsWith(':free')) return 'openrouter';
+
+  // Standalone open-weight names without vendor namespace
+  if (lower.startsWith('llama') || lower.startsWith('qwen')) return 'groq';
+
   return null;
 }
 
@@ -52,13 +64,15 @@ export class ProviderManager {
     // 3. Anthropic
     // 4. Groq LPU (Ultra-fast)
     // 5. DeepSeek
-    // 6. Custom
+    // 6. OpenRouter (Access to 200+ models)
+    // 7. Custom Endpoint
     this.providers = [
       new GeminiProvider(config.geminiApiKey),
       new OpenAIProvider(config.openaiApiKey),
       new AnthropicProvider(config.anthropicApiKey),
       new GroqProvider(config.groqApiKey),
       new DeepSeekProvider(config.deepseekApiKey),
+      new OpenRouterProvider(config.openrouterApiKey),
       new CustomProvider(config.llmBaseUrl, config.llmApiKey),
     ];
   }
@@ -74,25 +88,30 @@ export class ProviderManager {
     let targetProvider = this.preferred;
 
     // Smart Model-to-Provider resolution:
-    // If a model is specified, detect if it belongs to a specific provider
-    const detectedFromModel = detectProviderFromModel(modelOverride);
-    if (detectedFromModel) {
-      if (!targetProvider) {
-        // Model provided without explicit provider -> prioritize detected provider
-        targetProvider = detectedFromModel;
-        console.log(`💡 [ReviewGround] Auto-detected provider '${detectedFromModel}' from model '${modelOverride}'.`);
-      } else if (targetProvider !== detectedFromModel) {
-        // Mismatch: e.g. provider='gemini' but model='deepseek-chat'
-        const hasMatchingProvider = configured.some((p) => p.id === detectedFromModel);
-        if (hasMatchingProvider) {
-          console.warn(
-            `⚠️ [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but provider was specified as '${targetProvider}'. Automatically routing to '${detectedFromModel}' for compatibility.`
-          );
+    // If user explicitly configured provider as 'openrouter' or 'custom',
+    // NEVER reroute because OpenRouter / Custom can host ANY model (Qwen, Llama, DeepSeek, etc.)!
+    if (targetProvider === 'openrouter' || targetProvider === 'custom') {
+      // Respect user's explicit openrouter/custom provider selection unconditionally
+    } else {
+      const detectedFromModel = detectProviderFromModel(modelOverride);
+      if (detectedFromModel) {
+        if (!targetProvider) {
+          // Model provided without explicit provider -> prioritize detected provider
           targetProvider = detectedFromModel;
-        } else {
-          console.warn(
-            `⚠️ [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but no API key is configured for '${detectedFromModel}'. Falling back to '${targetProvider}' default chain.`
-          );
+          console.log(`💡 [ReviewGround] Auto-detected provider '${detectedFromModel}' from model '${modelOverride}'.`);
+        } else if (targetProvider !== detectedFromModel) {
+          // Mismatch: e.g. provider='gemini' but model='deepseek-chat'
+          const hasMatchingProvider = configured.some((p) => p.id === detectedFromModel);
+          if (hasMatchingProvider) {
+            console.warn(
+              `⚠️ [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but provider was specified as '${targetProvider}'. Automatically routing to '${detectedFromModel}' for compatibility.`
+            );
+            targetProvider = detectedFromModel;
+          } else {
+            console.warn(
+              `⚠️ [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but no API key is configured for '${detectedFromModel}'. Falling back to '${targetProvider}' default chain.`
+            );
+          }
         }
       }
     }
@@ -118,7 +137,7 @@ export class ProviderManager {
     const chain = this.getExecutionChain(options.model);
 
     if (chain.length === 0) {
-      console.log('ℹ️  No AI provider API keys detected (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, LLM_BASE_URL).');
+      console.log('ℹ️  No AI provider API keys detected (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL).');
       return null;
     }
 

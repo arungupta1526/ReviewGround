@@ -37,6 +37,7 @@ export interface ReviewerConfig {
   anthropicApiKey?: string;
   groqApiKey?: string;
   deepseekApiKey?: string;
+  openrouterApiKey?: string;
   llmBaseUrl?: string;
   llmApiKey?: string;
 }
@@ -329,6 +330,7 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     anthropicApiKey: config.anthropicApiKey,
     groqApiKey: config.groqApiKey,
     deepseekApiKey: config.deepseekApiKey,
+    openrouterApiKey: config.openrouterApiKey,
     llmBaseUrl: config.llmBaseUrl,
     llmApiKey: config.llmApiKey,
   });
@@ -339,7 +341,7 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     if (isBot) {
       console.log('ℹ️  Automated AI review skipped for bot PR: GitHub Actions restricts repo secrets for automated bots.');
     } else {
-      console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, LLM_BASE_URL). Skipping AI review.');
+      console.log('ℹ️  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.');
     }
     return null;
   }

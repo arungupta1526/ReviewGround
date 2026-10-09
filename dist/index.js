@@ -41917,6 +41917,87 @@ var DeepSeekProvider = class {
   }
 };
 
+// src/providers/openrouter.ts
+var OpenRouterProvider = class {
+  id = "openrouter";
+  name = "OpenRouter";
+  defaultModel = "qwen/qwen-2.5-coder-32b-instruct";
+  fallbackModels = [
+    "meta-llama/llama-3.3-70b-instruct",
+    "mistralai/mistral-small-24b-instruct-2501"
+  ];
+  apiKey;
+  baseUrl;
+  constructor(apiKey, baseUrl) {
+    this.apiKey = (apiKey || process.env.OPENROUTER_API_KEY || "").trim();
+    this.baseUrl = (baseUrl || process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+  }
+  isConfigured() {
+    return this.apiKey.length > 0;
+  }
+  async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
+    const url2 = `${this.baseUrl}/chat/completions`;
+    try {
+      const res = await fetch(url2, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://github.com/arungupta1526/ReviewGround",
+          "X-Title": "ReviewGround AI Code Reviewer"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: "system",
+              content: "You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature,
+          max_tokens: maxTokens
+        }),
+        signal: AbortSignal.timeout(35e3)
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`\u26A0\uFE0F OpenRouter model '${model}' returned HTTP ${res.status}: ${errText.slice(0, 200)}`);
+        return null;
+      }
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content;
+      return text && text.trim().length > 0 ? text.trim() : null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`\u26A0\uFE0F OpenRouter model '${model}' call failed: ${msg}`);
+      return null;
+    }
+  }
+  async review(prompt, options = {}) {
+    if (!this.isConfigured()) return null;
+    const primaryModel = options.model || process.env.OPENROUTER_MODEL || process.env.MODEL || this.defaultModel;
+    const fallbackModel = process.env.OPENROUTER_FALLBACK_MODEL || this.fallbackModels[0];
+    const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
+    for (const model of candidateModels) {
+      console.log(`\u26A1 [ReviewGround] Calling OpenRouter model '${model}'...`);
+      const text = await this.callModel(model, prompt, options.temperature, options.maxTokens);
+      if (text) {
+        return {
+          text,
+          model,
+          provider: this.name
+        };
+      }
+      console.warn(`\u26A0\uFE0F [ReviewGround] OpenRouter '${model}' failed or produced empty output. Trying next model...`);
+    }
+    return null;
+  }
+};
+
 // src/providers/custom.ts
 var CustomProvider = class {
   id = "custom";
@@ -41990,8 +42071,10 @@ function detectProviderFromModel(modelName) {
   if (lower.startsWith("gemini")) return "gemini";
   if (lower.startsWith("gpt-") || lower.startsWith("o1") || lower.startsWith("o3") || lower.startsWith("chatgpt")) return "openai";
   if (lower.startsWith("claude")) return "anthropic";
-  if (lower.startsWith("deepseek")) return "deepseek";
-  if (lower.startsWith("llama") || lower.startsWith("qwen") || lower.startsWith("mixtral")) return "groq";
+  if (lower === "qwen/qwen3.8-27b" || lower.startsWith("openai/gpt-oss")) return "groq";
+  if (lower.startsWith("deepseek") && !lower.includes("/")) return "deepseek";
+  if (lower.includes("/") || lower.endsWith(":free")) return "openrouter";
+  if (lower.startsWith("llama") || lower.startsWith("qwen")) return "groq";
   return null;
 }
 var ProviderManager = class {
@@ -42005,6 +42088,7 @@ var ProviderManager = class {
       new AnthropicProvider(config2.anthropicApiKey),
       new GroqProvider(config2.groqApiKey),
       new DeepSeekProvider(config2.deepseekApiKey),
+      new OpenRouterProvider(config2.openrouterApiKey),
       new CustomProvider(config2.llmBaseUrl, config2.llmApiKey)
     ];
   }
@@ -42015,22 +42099,25 @@ var ProviderManager = class {
     const configured = this.getConfiguredProviders();
     if (configured.length === 0) return [];
     let targetProvider = this.preferred;
-    const detectedFromModel = detectProviderFromModel(modelOverride);
-    if (detectedFromModel) {
-      if (!targetProvider) {
-        targetProvider = detectedFromModel;
-        console.log(`\u{1F4A1} [ReviewGround] Auto-detected provider '${detectedFromModel}' from model '${modelOverride}'.`);
-      } else if (targetProvider !== detectedFromModel) {
-        const hasMatchingProvider = configured.some((p) => p.id === detectedFromModel);
-        if (hasMatchingProvider) {
-          console.warn(
-            `\u26A0\uFE0F [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but provider was specified as '${targetProvider}'. Automatically routing to '${detectedFromModel}' for compatibility.`
-          );
+    if (targetProvider === "openrouter" || targetProvider === "custom") {
+    } else {
+      const detectedFromModel = detectProviderFromModel(modelOverride);
+      if (detectedFromModel) {
+        if (!targetProvider) {
           targetProvider = detectedFromModel;
-        } else {
-          console.warn(
-            `\u26A0\uFE0F [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but no API key is configured for '${detectedFromModel}'. Falling back to '${targetProvider}' default chain.`
-          );
+          console.log(`\u{1F4A1} [ReviewGround] Auto-detected provider '${detectedFromModel}' from model '${modelOverride}'.`);
+        } else if (targetProvider !== detectedFromModel) {
+          const hasMatchingProvider = configured.some((p) => p.id === detectedFromModel);
+          if (hasMatchingProvider) {
+            console.warn(
+              `\u26A0\uFE0F [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but provider was specified as '${targetProvider}'. Automatically routing to '${detectedFromModel}' for compatibility.`
+            );
+            targetProvider = detectedFromModel;
+          } else {
+            console.warn(
+              `\u26A0\uFE0F [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but no API key is configured for '${detectedFromModel}'. Falling back to '${targetProvider}' default chain.`
+            );
+          }
         }
       }
     }
@@ -42049,7 +42136,7 @@ var ProviderManager = class {
   async executeReview(prompt, options = {}) {
     const chain = this.getExecutionChain(options.model);
     if (chain.length === 0) {
-      console.log("\u2139\uFE0F  No AI provider API keys detected (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, LLM_BASE_URL).");
+      console.log("\u2139\uFE0F  No AI provider API keys detected (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL).");
       return null;
     }
     console.log(
@@ -42308,6 +42395,7 @@ async function runReview(config2 = {}) {
     anthropicApiKey: config2.anthropicApiKey,
     groqApiKey: config2.groqApiKey,
     deepseekApiKey: config2.deepseekApiKey,
+    openrouterApiKey: config2.openrouterApiKey,
     llmBaseUrl: config2.llmBaseUrl,
     llmApiKey: config2.llmApiKey
   });
@@ -42317,7 +42405,7 @@ async function runReview(config2 = {}) {
     if (isBot) {
       console.log("\u2139\uFE0F  Automated AI review skipped for bot PR: GitHub Actions restricts repo secrets for automated bots.");
     } else {
-      console.log("\u2139\uFE0F  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, LLM_BASE_URL). Skipping AI review.");
+      console.log("\u2139\uFE0F  No AI provider API keys configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, LLM_BASE_URL). Skipping AI review.");
     }
     return null;
   }
@@ -42724,6 +42812,7 @@ async function run() {
         anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"]) || void 0,
         groqApiKey: getOptionalInput("groq-api-key", ["GROQ_API_KEY"]) || void 0,
         deepseekApiKey: getOptionalInput("deepseek-api-key", ["DEEPSEEK_API_KEY"]) || void 0,
+        openrouterApiKey: getOptionalInput("openrouter-api-key", ["OPENROUTER_API_KEY"]) || void 0,
         llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL"]) || void 0,
         llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY"]) || void 0
       };

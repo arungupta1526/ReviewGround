@@ -4,6 +4,7 @@ export type ProviderName =
   | 'anthropic'
   | 'groq'
   | 'deepseek'
+  | 'openrouter'
   | 'custom';
 
 export interface ProviderResponse {

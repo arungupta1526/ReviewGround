@@ -44,6 +44,10 @@ inputs:
     description: 'DeepSeek API key (supports DeepSeek V3 / R1)'
     required: false
 
+  openrouter-api-key:
+    description: 'OpenRouter API key (supports 200+ models including Qwen, Llama, Mistral)'
+    required: false
+
   llm-base-url:
     description: 'Custom OpenAI-compatible base URL (e.g. http://localhost:11434/v1 for Ollama, or OpenRouter)'
     required: false

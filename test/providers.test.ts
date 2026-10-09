@@ -6,6 +6,7 @@ import { OpenAIProvider } from '../src/providers/openai.js';
 import { AnthropicProvider } from '../src/providers/anthropic.js';
 import { GroqProvider } from '../src/providers/groq.js';
 import { DeepSeekProvider } from '../src/providers/deepseek.js';
+import { OpenRouterProvider } from '../src/providers/openrouter.js';
 import { CustomProvider } from '../src/providers/custom.js';
 
 describe('Multi-Provider BYOK Engine', () => {
@@ -28,6 +29,9 @@ describe('Multi-Provider BYOK Engine', () => {
     const configuredDeepSeek = new DeepSeekProvider('fake-deepseek-key');
     assert.strictEqual(configuredDeepSeek.isConfigured(), true);
 
+    const configuredOpenRouter = new OpenRouterProvider('fake-openrouter-key');
+    assert.strictEqual(configuredOpenRouter.isConfigured(), true);
+
     const custom = new CustomProvider('http://localhost:11434/v1');
     assert.strictEqual(custom.isConfigured(), true);
   });
@@ -38,6 +42,7 @@ describe('Multi-Provider BYOK Engine', () => {
     assert.strictEqual(new AnthropicProvider().defaultModel, 'claude-3-5-haiku-20241022');
     assert.strictEqual(new GroqProvider().defaultModel, 'qwen/qwen3.8-27b');
     assert.strictEqual(new DeepSeekProvider().defaultModel, 'deepseek-chat');
+    assert.strictEqual(new OpenRouterProvider().defaultModel, 'qwen/qwen-2.5-coder-32b-instruct');
     assert.strictEqual(new CustomProvider().defaultModel, 'llama3.2');
   });
 
@@ -46,7 +51,9 @@ describe('Multi-Provider BYOK Engine', () => {
     assert.strictEqual(detectProviderFromModel('gpt-4o'), 'openai');
     assert.strictEqual(detectProviderFromModel('claude-3-5-sonnet'), 'anthropic');
     assert.strictEqual(detectProviderFromModel('deepseek-chat'), 'deepseek');
-    assert.strictEqual(detectProviderFromModel('llama-3.3-70b-versatile'), 'groq');
+    assert.strictEqual(detectProviderFromModel('qwen/qwen3.8-27b'), 'groq');
+    assert.strictEqual(detectProviderFromModel('qwen/qwen-2.5-coder-32b-instruct'), 'openrouter');
+    assert.strictEqual(detectProviderFromModel('meta-llama/llama-3.3-70b-instruct'), 'openrouter');
     assert.strictEqual(detectProviderFromModel('unknown-model'), null);
   });
 
@@ -77,16 +84,29 @@ describe('Multi-Provider BYOK Engine', () => {
     assert.strictEqual(chain[1].id, 'gemini');
   });
 
-  it('ProviderManager auto-detects provider from model name when preferredProvider is not set', () => {
+  it('ProviderManager does NOT reroute when provider is explicitly set to custom or openrouter', () => {
     const manager = new ProviderManager({
-      geminiApiKey: 'test-gemini',
-      deepseekApiKey: 'test-deepseek',
+      groqApiKey: 'test-groq',
+      llmBaseUrl: 'https://api.together.xyz/v1',
+      llmApiKey: 'test-together',
+      preferredProvider: 'custom',
     });
 
-    // DeepSeek model passed without explicit provider
-    const chain = manager.getExecutionChain('deepseek-chat');
+    // Even though model is qwen, user explicitly chose custom endpoint (Together AI)
+    const chain = manager.getExecutionChain('qwen/qwen-2.5-72b-instruct');
     assert.strictEqual(chain.length, 2);
-    assert.strictEqual(chain[0].id, 'deepseek');
+    assert.strictEqual(chain[0].id, 'custom');
+  });
+
+  it('ProviderManager auto-detects OpenRouter from namespaced model when openrouter key exists', () => {
+    const manager = new ProviderManager({
+      geminiApiKey: 'test-gemini',
+      openrouterApiKey: 'test-openrouter',
+    });
+
+    const chain = manager.getExecutionChain('qwen/qwen-2.5-coder-32b-instruct');
+    assert.strictEqual(chain.length, 2);
+    assert.strictEqual(chain[0].id, 'openrouter');
     assert.strictEqual(chain[1].id, 'gemini');
   });
 
@@ -94,12 +114,11 @@ describe('Multi-Provider BYOK Engine', () => {
     const manager = new ProviderManager({
       geminiApiKey: 'test-gemini',
       deepseekApiKey: 'test-deepseek',
-      preferredProvider: 'gemini', // User requested Gemini, but passed deepseek-chat model
+      preferredProvider: 'gemini',
     });
 
     const chain = manager.getExecutionChain('deepseek-chat');
     assert.strictEqual(chain.length, 2);
-    // Auto-routed to deepseek because deepseek API key is present
     assert.strictEqual(chain[0].id, 'deepseek');
     assert.strictEqual(chain[1].id, 'gemini');
   });

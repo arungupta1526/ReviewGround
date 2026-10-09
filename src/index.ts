@@ -91,6 +91,7 @@ async function run(): Promise<void> {
         anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY']) || undefined,
         groqApiKey: getOptionalInput('groq-api-key', ['GROQ_API_KEY']) || undefined,
         deepseekApiKey: getOptionalInput('deepseek-api-key', ['DEEPSEEK_API_KEY']) || undefined,
+        openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY']) || undefined,
         llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL']) || undefined,
         llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY']) || undefined,
       };
