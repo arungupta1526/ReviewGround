@@ -4,7 +4,7 @@ export class GroqProvider implements LLMProvider {
   readonly id = 'groq' as const;
   readonly name = 'Groq LPU';
   readonly defaultModel = 'llama-3.3-70b-versatile';
-  readonly fallbackModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'llama-3.1-8b-instant'];
+  readonly fallbackModels = ['qwen/qwen3.8-27b', 'llama-3.1-8b-instant'];
 
   private apiKey: string;
 
@@ -23,7 +23,6 @@ export class GroqProvider implements LLMProvider {
     maxTokens = 2048
   ): Promise<{ text: string | null; reasoning?: string }> {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
-    // Groq free/on-demand tier has token rate limits; cap prompt characters safely
     const safePrompt =
       prompt.length > 16000
         ? prompt.slice(0, 16000) + '\n\n...[diff truncated for Groq token limit]'
@@ -91,7 +90,8 @@ export class GroqProvider implements LLMProvider {
   async review(prompt: string, options: ReviewOptions = {}): Promise<ProviderResponse | null> {
     if (!this.isConfigured()) return null;
 
-    const primaryModel = options.model || process.env.GROQ_MODEL || this.defaultModel;
+    // Hierarchy: 1. options.model -> 2. GROQ_MODEL / MODEL -> 3. defaultModel
+    const primaryModel = options.model || process.env.GROQ_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.GROQ_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
 

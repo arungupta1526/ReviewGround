@@ -71,7 +71,8 @@ export class OpenAIProvider implements LLMProvider {
   async review(prompt: string, options: ReviewOptions = {}): Promise<ProviderResponse | null> {
     if (!this.isConfigured()) return null;
 
-    const primaryModel = options.model || process.env.OPENAI_MODEL || this.defaultModel;
+    // Hierarchy: 1. options.model -> 2. OPENAI_MODEL / MODEL -> 3. defaultModel
+    const primaryModel = options.model || process.env.OPENAI_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.OPENAI_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
 

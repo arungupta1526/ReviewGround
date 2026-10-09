@@ -3,7 +3,7 @@ import { LLMProvider, ProviderResponse, ReviewOptions } from './types.js';
 export class CustomProvider implements LLMProvider {
   readonly id = 'custom' as const;
   readonly name = 'Custom Endpoint';
-  readonly defaultModel = 'default';
+  readonly defaultModel = 'llama3.2';
 
   private baseUrl: string;
   private apiKey: string;
@@ -20,7 +20,8 @@ export class CustomProvider implements LLMProvider {
   async review(prompt: string, options: ReviewOptions = {}): Promise<ProviderResponse | null> {
     if (!this.isConfigured()) return null;
 
-    const model = options.model || process.env.LLM_MODEL || this.defaultModel;
+    // Hierarchy: 1. options.model -> 2. LLM_MODEL / MODEL -> 3. defaultModel
+    const model = options.model || process.env.LLM_MODEL || process.env.MODEL || this.defaultModel;
     const url = `${this.baseUrl}/chat/completions`;
 
     const headers: Record<string, string> = {

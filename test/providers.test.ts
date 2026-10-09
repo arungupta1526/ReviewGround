@@ -32,6 +32,15 @@ describe('Multi-Provider BYOK Engine', () => {
     assert.strictEqual(custom.isConfigured(), true);
   });
 
+  it('exposes modern defaults across all providers', () => {
+    assert.strictEqual(new GeminiProvider().defaultModel, 'gemini-3.5-flash-lite');
+    assert.strictEqual(new OpenAIProvider().defaultModel, 'gpt-4o-mini');
+    assert.strictEqual(new AnthropicProvider().defaultModel, 'claude-3-5-haiku-20241022');
+    assert.strictEqual(new GroqProvider().defaultModel, 'llama-3.3-70b-versatile');
+    assert.strictEqual(new DeepSeekProvider().defaultModel, 'deepseek-chat');
+    assert.strictEqual(new CustomProvider().defaultModel, 'llama3.2');
+  });
+
   it('ProviderManager discovers configured providers', () => {
     const manager = new ProviderManager({
       geminiApiKey: 'test-gemini',

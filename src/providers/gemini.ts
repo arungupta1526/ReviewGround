@@ -18,8 +18,8 @@ interface GeminiApiResponse {
 export class GeminiProvider implements LLMProvider {
   readonly id = 'gemini' as const;
   readonly name = 'Google Gemini';
-  readonly defaultModel = 'gemini-2.5-flash';
-  readonly fallbackModels = ['gemini-2.5-flash-lite', 'gemini-1.5-flash'];
+  readonly defaultModel = 'gemini-3.5-flash-lite';
+  readonly fallbackModels = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
   private apiKey: string;
 
@@ -89,7 +89,8 @@ export class GeminiProvider implements LLMProvider {
   async review(prompt: string, options: ReviewOptions = {}): Promise<ProviderResponse | null> {
     if (!this.isConfigured()) return null;
 
-    const primaryModel = options.model || process.env.GEMINI_MODEL || this.defaultModel;
+    // Hierarchy: 1. options.model -> 2. GEMINI_MODEL / MODEL -> 3. defaultModel
+    const primaryModel = options.model || process.env.GEMINI_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
 

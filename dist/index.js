@@ -41527,8 +41527,8 @@ function date4(params) {
 var GeminiProvider = class {
   id = "gemini";
   name = "Google Gemini";
-  defaultModel = "gemini-2.5-flash";
-  fallbackModels = ["gemini-2.5-flash-lite", "gemini-1.5-flash"];
+  defaultModel = "gemini-3.5-flash-lite";
+  fallbackModels = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.GEMINI_API_KEY || "").trim();
@@ -41582,7 +41582,7 @@ var GeminiProvider = class {
   }
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
-    const primaryModel = options.model || process.env.GEMINI_MODEL || this.defaultModel;
+    const primaryModel = options.model || process.env.GEMINI_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
     const enableSearch = options.enableSearchGrounding !== false;
@@ -41666,7 +41666,7 @@ var OpenAIProvider = class {
   }
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
-    const primaryModel = options.model || process.env.OPENAI_MODEL || this.defaultModel;
+    const primaryModel = options.model || process.env.OPENAI_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.OPENAI_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
     for (const model of candidateModels) {
@@ -41689,8 +41689,8 @@ var OpenAIProvider = class {
 var AnthropicProvider = class {
   id = "anthropic";
   name = "Anthropic Claude";
-  defaultModel = "claude-3-5-sonnet-20241022";
-  fallbackModels = ["claude-3-5-haiku-20241022", "claude-3-sonnet-20240229"];
+  defaultModel = "claude-3-5-haiku-20241022";
+  fallbackModels = ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.ANTHROPIC_API_KEY || "").trim();
@@ -41739,7 +41739,7 @@ var AnthropicProvider = class {
   }
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
-    const primaryModel = options.model || process.env.ANTHROPIC_MODEL || this.defaultModel;
+    const primaryModel = options.model || process.env.ANTHROPIC_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.ANTHROPIC_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
     for (const model of candidateModels) {
@@ -41763,7 +41763,7 @@ var GroqProvider = class {
   id = "groq";
   name = "Groq LPU";
   defaultModel = "llama-3.3-70b-versatile";
-  fallbackModels = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "llama-3.1-8b-instant"];
+  fallbackModels = ["qwen/qwen3.8-27b", "llama-3.1-8b-instant"];
   apiKey;
   constructor(apiKey) {
     this.apiKey = (apiKey || process.env.GROQ_API_KEY || "").trim();
@@ -41818,7 +41818,7 @@ var GroqProvider = class {
   }
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
-    const primaryModel = options.model || process.env.GROQ_MODEL || this.defaultModel;
+    const primaryModel = options.model || process.env.GROQ_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.GROQ_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
     for (const model of candidateModels) {
@@ -41874,7 +41874,6 @@ var DeepSeekProvider = class {
               content: prompt
             }
           ],
-          // DeepSeek-reasoner does not support temperature; only include temperature if not reasoner
           ...model.includes("reasoner") ? {} : { temperature },
           max_tokens: maxTokens
         }),
@@ -41898,7 +41897,7 @@ var DeepSeekProvider = class {
   }
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
-    const primaryModel = options.model || process.env.DEEPSEEK_MODEL || this.defaultModel;
+    const primaryModel = options.model || process.env.DEEPSEEK_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.DEEPSEEK_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(/* @__PURE__ */ new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
     for (const model of candidateModels) {
@@ -41922,7 +41921,7 @@ var DeepSeekProvider = class {
 var CustomProvider = class {
   id = "custom";
   name = "Custom Endpoint";
-  defaultModel = "default";
+  defaultModel = "llama3.2";
   baseUrl;
   apiKey;
   constructor(baseUrl, apiKey) {
@@ -41934,7 +41933,7 @@ var CustomProvider = class {
   }
   async review(prompt, options = {}) {
     if (!this.isConfigured()) return null;
-    const model = options.model || process.env.LLM_MODEL || this.defaultModel;
+    const model = options.model || process.env.LLM_MODEL || process.env.MODEL || this.defaultModel;
     const url2 = `${this.baseUrl}/chat/completions`;
     const headers = {
       "Content-Type": "application/json"

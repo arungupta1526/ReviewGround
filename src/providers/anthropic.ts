@@ -14,8 +14,8 @@ interface AnthropicApiResponse {
 export class AnthropicProvider implements LLMProvider {
   readonly id = 'anthropic' as const;
   readonly name = 'Anthropic Claude';
-  readonly defaultModel = 'claude-3-5-sonnet-20241022';
-  readonly fallbackModels = ['claude-3-5-haiku-20241022', 'claude-3-sonnet-20240229'];
+  readonly defaultModel = 'claude-3-5-haiku-20241022';
+  readonly fallbackModels = ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'];
 
   private apiKey: string;
 
@@ -77,7 +77,8 @@ export class AnthropicProvider implements LLMProvider {
   async review(prompt: string, options: ReviewOptions = {}): Promise<ProviderResponse | null> {
     if (!this.isConfigured()) return null;
 
-    const primaryModel = options.model || process.env.ANTHROPIC_MODEL || this.defaultModel;
+    // Hierarchy: 1. options.model -> 2. ANTHROPIC_MODEL / MODEL -> 3. defaultModel
+    const primaryModel = options.model || process.env.ANTHROPIC_MODEL || process.env.MODEL || this.defaultModel;
     const fallbackModel = process.env.ANTHROPIC_FALLBACK_MODEL || this.fallbackModels[0];
     const candidateModels = Array.from(new Set([primaryModel, fallbackModel, ...this.fallbackModels])).filter(Boolean);
 
