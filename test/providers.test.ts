@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { ProviderManager } from '../src/providers/index.js';
+import { ProviderManager, detectProviderFromModel } from '../src/providers/index.js';
 import { GeminiProvider } from '../src/providers/gemini.js';
 import { OpenAIProvider } from '../src/providers/openai.js';
 import { AnthropicProvider } from '../src/providers/anthropic.js';
@@ -41,16 +41,27 @@ describe('Multi-Provider BYOK Engine', () => {
     assert.strictEqual(new CustomProvider().defaultModel, 'llama3.2');
   });
 
-  it('ProviderManager discovers configured providers', () => {
+  it('detects matching provider from model name prefixes', () => {
+    assert.strictEqual(detectProviderFromModel('gemini-2.5-pro'), 'gemini');
+    assert.strictEqual(detectProviderFromModel('gpt-4o'), 'openai');
+    assert.strictEqual(detectProviderFromModel('claude-3-5-sonnet'), 'anthropic');
+    assert.strictEqual(detectProviderFromModel('deepseek-chat'), 'deepseek');
+    assert.strictEqual(detectProviderFromModel('llama-3.3-70b-versatile'), 'groq');
+    assert.strictEqual(detectProviderFromModel('unknown-model'), null);
+  });
+
+  it('ProviderManager discovers configured providers in default serial order', () => {
     const manager = new ProviderManager({
       geminiApiKey: 'test-gemini',
+      openaiApiKey: 'test-openai',
       groqApiKey: 'test-groq',
     });
 
-    const configured = manager.getConfiguredProviders();
-    assert.strictEqual(configured.length, 2);
-    assert.strictEqual(configured[0].id, 'gemini');
-    assert.strictEqual(configured[1].id, 'groq');
+    const chain = manager.getExecutionChain();
+    assert.strictEqual(chain.length, 3);
+    assert.strictEqual(chain[0].id, 'gemini');
+    assert.strictEqual(chain[1].id, 'openai');
+    assert.strictEqual(chain[2].id, 'groq');
   });
 
   it('ProviderManager respects preferred provider override', () => {
@@ -63,6 +74,33 @@ describe('Multi-Provider BYOK Engine', () => {
     const chain = manager.getExecutionChain();
     assert.strictEqual(chain.length, 2);
     assert.strictEqual(chain[0].id, 'groq');
+    assert.strictEqual(chain[1].id, 'gemini');
+  });
+
+  it('ProviderManager auto-detects provider from model name when preferredProvider is not set', () => {
+    const manager = new ProviderManager({
+      geminiApiKey: 'test-gemini',
+      deepseekApiKey: 'test-deepseek',
+    });
+
+    // DeepSeek model passed without explicit provider
+    const chain = manager.getExecutionChain('deepseek-chat');
+    assert.strictEqual(chain.length, 2);
+    assert.strictEqual(chain[0].id, 'deepseek');
+    assert.strictEqual(chain[1].id, 'gemini');
+  });
+
+  it('ProviderManager gracefully routes mismatched model if matching provider has an API key', () => {
+    const manager = new ProviderManager({
+      geminiApiKey: 'test-gemini',
+      deepseekApiKey: 'test-deepseek',
+      preferredProvider: 'gemini', // User requested Gemini, but passed deepseek-chat model
+    });
+
+    const chain = manager.getExecutionChain('deepseek-chat');
+    assert.strictEqual(chain.length, 2);
+    // Auto-routed to deepseek because deepseek API key is present
+    assert.strictEqual(chain[0].id, 'deepseek');
     assert.strictEqual(chain[1].id, 'gemini');
   });
 

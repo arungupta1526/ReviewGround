@@ -77,6 +77,37 @@ Want to switch models or providers without editing your `.github/workflows` YAML
 
 ---
 
+### 3. Priority Hierarchy & Automatic Fallback Chains (Serial Kram)
+
+#### ❓ Is `provider` or `model` mandatory to configure?
+**No, completely optional!** If you only provide your API keys and omit `provider` and `model`, ReviewGround auto-detects your keys and uses the optimal default baseline model.
+
+#### ❓ What happens if you configure ALL API keys? (Default Priority Order)
+When multiple keys are provided without a preference, ReviewGround uses this battle-tested priority order. If any provider experiences a quota limit (HTTP 429) or timeout, it gracefully falls over to the next provider:
+
+| Priority Rank | Provider | Default Primary Model | Built-In Fallback Chain | Key Strength |
+|:---:|---|---|---|---|
+| **#1 (Default)** | **Google Gemini** | `gemini-3.5-flash-lite` | `gemini-3.1-flash-lite` ➔ `gemini-2.5-flash` | Live Google Search Tool Grounding |
+| **#2** | **OpenAI** | `gpt-4o-mini` | `gpt-4o` | Precision DevSecOps & code analysis |
+| **#3** | **Anthropic Claude** | `claude-3-5-haiku` | `claude-3-5-sonnet` | Deep reasoning & architectural insight |
+| **#4** | **Groq LPU** | `llama-3.3-70b-versatile` | `qwen/qwen3.8-27b` ➔ `llama-3.1-8b-instant` | Blazing-fast LPU inference (under 3s) |
+| **#5** | **DeepSeek** | `deepseek-chat` | `deepseek-reasoner` (R1) | Cost-effective reasoning & logic |
+| **#6** | **Custom / Ollama** | `llama3.2` | Configurable | Self-hosted & air-gapped endpoints |
+
+#### ❓ How do you change the provider priority?
+You can promote any provider to #1 priority easily:
+1. **Zero-Commit (Recommended)**: In GitHub **Settings** ➔ **Secrets and variables** ➔ **Actions** ➔ **Variables**, set `PROVIDER: "groq"` or `PROVIDER: "openai"`.
+2. **In Workflow YAML**: Pass `provider: "anthropic"` under `with:` or `PROVIDER: "anthropic"` under `env:`.
+
+#### ❓ What happens if you specify a mismatched Provider and Model (e.g. Provider = Google, Model = DeepSeek)?
+ReviewGround features **Smart Mismatch Auto-Routing**:
+- If `provider: 'gemini'` and `model: 'deepseek-chat'` are passed:
+  1. ReviewGround inspects the model prefix and detects that `deepseek-chat` belongs to DeepSeek.
+  2. If `DEEPSEEK_API_KEY` is present, it **automatically routes the request to DeepSeek** to prevent an invalid model API error!
+  3. If DeepSeek is not configured, Gemini will attempt it, catch the invalid model response, and **automatically fall back to `gemini-3.5-flash-lite`** without failing your CI pipeline!
+
+---
+
 ## ⚡ Quickstart Workflows
 
 Create `.github/workflows/reviewground.yml` in your project:

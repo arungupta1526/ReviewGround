@@ -41984,6 +41984,16 @@ var CustomProvider = class {
 };
 
 // src/providers/index.ts
+function detectProviderFromModel(modelName) {
+  if (!modelName) return null;
+  const lower = modelName.trim().toLowerCase();
+  if (lower.startsWith("gemini")) return "gemini";
+  if (lower.startsWith("gpt-") || lower.startsWith("o1") || lower.startsWith("o3") || lower.startsWith("chatgpt")) return "openai";
+  if (lower.startsWith("claude")) return "anthropic";
+  if (lower.startsWith("deepseek")) return "deepseek";
+  if (lower.startsWith("llama") || lower.startsWith("qwen") || lower.startsWith("mixtral")) return "groq";
+  return null;
+}
 var ProviderManager = class {
   providers;
   preferred;
@@ -42001,23 +42011,43 @@ var ProviderManager = class {
   getConfiguredProviders() {
     return this.providers.filter((p) => p.isConfigured());
   }
-  getExecutionChain() {
+  getExecutionChain(modelOverride) {
     const configured = this.getConfiguredProviders();
     if (configured.length === 0) return [];
-    if (this.preferred) {
+    let targetProvider = this.preferred;
+    const detectedFromModel = detectProviderFromModel(modelOverride);
+    if (detectedFromModel) {
+      if (!targetProvider) {
+        targetProvider = detectedFromModel;
+        console.log(`\u{1F4A1} [ReviewGround] Auto-detected provider '${detectedFromModel}' from model '${modelOverride}'.`);
+      } else if (targetProvider !== detectedFromModel) {
+        const hasMatchingProvider = configured.some((p) => p.id === detectedFromModel);
+        if (hasMatchingProvider) {
+          console.warn(
+            `\u26A0\uFE0F [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but provider was specified as '${targetProvider}'. Automatically routing to '${detectedFromModel}' for compatibility.`
+          );
+          targetProvider = detectedFromModel;
+        } else {
+          console.warn(
+            `\u26A0\uFE0F [ReviewGround] Model '${modelOverride}' matches provider '${detectedFromModel}', but no API key is configured for '${detectedFromModel}'. Falling back to '${targetProvider}' default chain.`
+          );
+        }
+      }
+    }
+    if (targetProvider) {
       const matchIndex = configured.findIndex(
-        (p) => p.id === this.preferred || p.name.toLowerCase().includes(this.preferred)
+        (p) => p.id === targetProvider || p.name.toLowerCase().includes(targetProvider)
       );
       if (matchIndex > -1) {
         const [preferred] = configured.splice(matchIndex, 1);
         return [preferred, ...configured];
       }
-      console.warn(`\u26A0\uFE0F Preferred provider '${this.preferred}' is not configured with an API key. Using auto-detected chain.`);
+      console.warn(`\u26A0\uFE0F Preferred provider '${targetProvider}' is not configured with an API key. Using auto-detected chain.`);
     }
     return configured;
   }
   async executeReview(prompt, options = {}) {
-    const chain = this.getExecutionChain();
+    const chain = this.getExecutionChain(options.model);
     if (chain.length === 0) {
       console.log("\u2139\uFE0F  No AI provider API keys detected (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, LLM_BASE_URL).");
       return null;
