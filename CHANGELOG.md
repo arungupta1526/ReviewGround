@@ -15,12 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `review-level` input — `critical` (bugs & security only), `standard` (default), `comprehensive` (all + style)
 - `ignore-patterns` input — comma-separated glob patterns to exclude files from AI review (e.g. `dist/**,*.min.js`)
 - Repository custom rules support — loads repo-specific guidelines from `.reviewground.yml`, `.reviewground.yaml`, or `.github/reviewground.yml`
+- Smart Dependabot configuration with separate development tooling and production dependency groups
+- Upgraded `esbuild` to `0.28.2` with full bundle rebuild
+- Upgraded `@actions/core` to `3.0.1` and kept `@types/node` aligned with Node 24 LTS (`24.19.1`)
 - `truncateDiffClean()` — smart diff truncation at clean hunk boundaries, prevents malformed diffs reaching LLMs
 - Paginated comment search — handles PRs with >100 comments without duplicate sticky comments
 - Visible warning when Groq provider truncates large diffs at 16,000 chars
 - Informational log when inline suggestion count is capped at 5
 
 ### Fixed
+- **TypeScript Node Globals Resolution**: Added `"types": ["node"]` to `tsconfig.json` compilerOptions to guarantee global `process`, `console`, and `fetch` type declarations under NodeNext ESM packages (e.g. `@actions/core` v3)
 - **Bug #1**: Hard diff truncation at 32,000 chars could cut mid-hunk — now truncates at clean `diff --git` boundaries
 - **Bug #2**: Sticky comment lookup only searched first 100 PR comments — fixed with full paginated lookup
 - **Bug #3**: `fs.appendFileSync` used inside async context — replaced with `await fs.promises.appendFile`
