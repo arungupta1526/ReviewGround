@@ -393,6 +393,10 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Max Tokens** | `max-tokens` | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS` | `2048` |
 | **Review Level** | `review-level` | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL` | `standard` (`critical` \| `standard` \| `comprehensive`) |
 | **Ignore Patterns** | `ignore-patterns` | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS` | — (comma-separated globs e.g. `dist/**,*.min.js`) |
+| **Review Language** | `review-language` | `REVIEWGROUND_REVIEW_LANGUAGE`, `REVIEW_LANGUAGE` | `en` (e.g. `ja`, `es`, `de`, `zh`, `pt`, `fr`) |
+| **PR Description Update** | `enable-pr-description-update` | `ENABLE_PR_DESCRIPTION_UPDATE` | `false` — auto-appends 🟢/🟡/🔴 risk badge to PR body |
+| **GitHub Check Run** | `enable-check-run` | `ENABLE_CHECK_RUN` | `false` — creates pass/fail Check Run (requires `checks: write`) |
+| **Extra CI Stages** | `extra-stages` | `REVIEWGROUND_EXTRA_STAGES`, `EXTRA_STAGES` | — JSON array e.g. `[{"name":"Deploy","result":"success"}]` |
 | **Comment Tag** | `comment-tag` | `REVIEWGROUND_COMMENT_TAG`, `COMMENT_TAG` | `<!-- reviewground-code-review -->` |
 
 ### Action Outputs
@@ -420,6 +424,60 @@ rules:
 ```
 
 ReviewGround automatically detects this file and injects your repository rules directly into the AI prompt!
+
+---
+
+## 🛡️ Enterprise Workflow Features
+
+### 1. GitHub Check Run (PR Merge Gate)
+Turn ReviewGround into a mandatory status check in your branch protection rules. When enabled, it creates a native GitHub Check Run that **fails** if critical security vulnerabilities, injection flaws, or secret leaks are detected:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+  checks: write    # Required for Check Run gate
+
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      enable-check-run: 'true'
+      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+### 2. PR Description Auto-Update with Risk Badge
+Automatically prepend a risk level badge (🟢 Low / 🟡 Moderate / 🔴 High Risk) and executive summary to the pull request's initial description:
+
+```yaml
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      enable-pr-description-update: 'true'
+      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+### 3. Multi-Language Reviews
+Receive AI code reviews in your team's preferred language (e.g. Japanese, Spanish, German, French, Chinese, Portuguese):
+
+```yaml
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      review-language: 'ja' # 'ja', 'es', 'de', 'zh', 'pt', 'fr', etc.
+      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+### 4. Dynamic Extra Stages in CI Summary
+Append custom stages (such as deployments, visual regression, or integration suites) to the post-CI summary table:
+
+```yaml
+steps:
+  - uses: arungupta1526/ReviewGround@v1
+    with:
+      mode: 'summary'
+      extra-stages: '[{"name":"E2E Cypress","result":"success"},{"name":"Staging Deploy","result":"success"}]'
+```
 
 ---
 

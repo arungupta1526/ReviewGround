@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `review-language` input — outputs AI review in any language (`ja`, `es`, `de`, `zh`, `pt`, `fr`, or any BCP-47 code, default `en`)
+- `enable-pr-description-update` input — auto-appends 🟢/🟡/🔴 risk badge + AI summary to PR body (opt-in, default `false`)
+- `enable-check-run` input — creates a GitHub Check Run pass/fail gate usable in branch protection rules; requires `checks: write` permission (opt-in, default `false`)
+- `extra-stages` input — JSON array of extra CI stages appended to the summary table beyond the default 4 (e.g. `[{"name":"Deploy","result":"success"}]`)
+- `src/utils/fetchWithRetry.ts` — shared fetch utility with exponential backoff + jitter (50–250ms), retries up to 2 times on transient failures; integrated into all 7 provider adapters
+- Provider-specific prompt styles (I7): Claude/Anthropic uses XML `<instructions>/<diff>` tags; Gemini uses structured schema + section guidance; Groq/Qwen/Llama uses `##` markdown headers; all others use the generic prompt
+- `updatePrDescription()` function — idempotent PR body updater using `<!-- reviewground-pr-description -->` anchor tag
+- `createCheckRun()` function — posts to `/repos/{owner}/{repo}/check-runs` with `failure` or `success` conclusion based on critical keyword detection in review text
 - `temperature` input — controls LLM sampling temperature (0.0–1.0, default `0.2`)
 - `max-tokens` input — controls maximum AI response tokens (default `2048`)
 - `review-level` input — `critical` (bugs & security only), `standard` (default), `comprehensive` (all + style)
@@ -36,8 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Review prompt is now dynamically generated based on `review-level` — reduces noise in `critical` mode
+- All 7 provider adapters now use shared `fetchWithRetry` instead of raw `fetch` + `AbortSignal.timeout` — adds automatic retry resilience with no behavior change for the happy path
+- `AGENTS.md` rule #7 added: mandatory CHANGELOG.md update required after every code change
 
 ---
+
 
 ## [1.0.0] - 2026-10-09
 

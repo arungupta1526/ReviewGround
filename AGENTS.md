@@ -31,6 +31,15 @@ This document establishes the mandatory architectural rules, Git workflows, secu
 6. **Mandatory Post-Change README Walkthrough**:
    - After completing ANY code modification, bug fix, or feature addition, the AI agent MUST perform a thorough review and walkthrough of `README.md`.
    - Ensure complete documentation parity: all new inputs, environment variables, model defaults, provider capabilities, or workflow examples must be accurately reflected in `README.md`, regardless of whether README changes were explicitly requested.
+7. **Mandatory CHANGELOG.md Update**:
+   - After completing ANY code change (bug fix, improvement, or new feature), the AI agent MUST update `CHANGELOG.md` under the `[Unreleased]` section.
+   - Follow the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format strictly:
+     - `### Added` — for new inputs, features, functions, or files
+     - `### Fixed` — for bug fixes and defect resolutions
+     - `### Changed` — for modifications to existing behavior or config
+     - `### Removed` — for deleted inputs, features, or files
+   - Every entry must be a single, clear bullet point that a developer can read and immediately understand whether to upgrade.
+   - Never skip CHANGELOG updates — users evaluating `@v1.0.0 → @v1.1.0` upgrades rely on it to make informed decisions.
 
 ---
 
