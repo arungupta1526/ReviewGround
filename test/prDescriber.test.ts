@@ -68,4 +68,28 @@ describe('PR Description & Walkthrough Generator (Feature 2)', () => {
     const matches = result.match(/<!-- reviewground-pr-description -->/g);
     assert.strictEqual(matches?.length, 1);
   });
+
+  it('mergePrDescriptionBody cleanly removes multiple duplicate legacy sections', () => {
+    const duplicatedBody = `Initial author description
+
+---
+
+### 🤖 ReviewGround PR Description & Walkthrough
+Old summary 1
+<!-- reviewground-pr-description -->
+
+### 🤖 ReviewGround PR Description & Walkthrough
+Old summary 2
+<!-- reviewground-pr-description -->`;
+
+    const aiMarkdown = '### 📝 Summary of Changes\nClean single summary.';
+    const result = mergePrDescriptionBody(duplicatedBody, aiMarkdown);
+
+    assert.ok(result.startsWith('Initial author description'));
+    assert.ok(result.includes('Clean single summary.'));
+    assert.ok(!result.includes('Old summary 1'));
+    assert.ok(!result.includes('Old summary 2'));
+    const matches = result.match(/### 🤖 ReviewGround PR Description & Walkthrough/g);
+    assert.strictEqual(matches?.length, 1);
+  });
 });

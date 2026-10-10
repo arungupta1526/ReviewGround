@@ -830,12 +830,21 @@ export async function createCheckRun(
 
     // Determine check conclusion based on review findings
     const lowerReview = reviewText.toLowerCase();
+    const isClean =
+      lowerReview.includes('all changes look clean') ||
+      lowerReview.includes('looks clean') ||
+      lowerReview.includes('looks solid');
+
     const hasCriticalIssues =
-      lowerReview.includes('critical') ||
-      lowerReview.includes('vulnerability') ||
-      lowerReview.includes('security risk') ||
-      lowerReview.includes('injection') ||
-      lowerReview.includes('secret leak');
+      !isClean &&
+      (lowerReview.includes('critical bug') ||
+        lowerReview.includes('critical vulnerability') ||
+        lowerReview.includes('critical issue') ||
+        lowerReview.includes('critical regression') ||
+        lowerReview.includes('❌') ||
+        lowerReview.includes('secret leak detected') ||
+        lowerReview.includes('sql injection') ||
+        lowerReview.includes('security vulnerability detected'));
 
     const conclusion = hasCriticalIssues ? 'failure' : 'success';
     const title = hasCriticalIssues

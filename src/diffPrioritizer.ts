@@ -137,9 +137,10 @@ export function packPrioritizedDiff(rawDiff: string, maxChars = 28000): SmartDif
       packed.push(entry.hunkBlock);
       remaining -= entry.charCount;
     } else {
-      // Partial include at clean hunk boundary
-      const partial = entry.hunkBlock.slice(0, remaining);
-      packed.push(partial + '\n... [truncated — P0 file too large] ...');
+      const truncatedSlice = entry.hunkBlock.slice(0, remaining);
+      const lastNewline = truncatedSlice.lastIndexOf('\n');
+      const safeSlice = lastNewline > 0 ? truncatedSlice.slice(0, lastNewline) : truncatedSlice;
+      packed.push(safeSlice + '\n... [truncated — P0 file too large] ...');
       remaining = 0;
     }
   }
