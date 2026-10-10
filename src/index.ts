@@ -246,6 +246,9 @@ async function run(): Promise<void> {
           getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
         enablePrDescriptionUpdate: getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
         enableCheckRun: getBooleanInput('enable-check-run', ['ENABLE_CHECK_RUN'], false),
+        skipOnCiFailure: getBooleanInput('skip-on-ci-failure', ['SKIP_ON_CI_FAILURE', 'REVIEWGROUND_SKIP_ON_CI_FAILURE'], false),
+        buildResult: getOptionalInput('build-result', ['BUILD_RESULT']),
+        testResult: getOptionalInput('test-result', ['TEST_RESULT']),
       };
 
       console.log('\n--- 🤖 Starting AI Code Review ---');
