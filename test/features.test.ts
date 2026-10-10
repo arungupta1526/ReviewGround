@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { packPrioritizedDiff, splitAndPrioritizeDiff } from '../src/diffPrioritizer.js';
 import { analyzeTestCoverage } from '../src/testCoverageDetector.js';
-import { parseSlashCommand } from '../src/slashCommands.js';
+import { parseSlashCommand, extractChatQuery } from '../src/slashCommands.js';
 import { verifyPackagesMultiRegistry } from '../src/packageRegistry.js';
 
 // ──────────────────────────────────────────────────────────
@@ -177,6 +177,14 @@ describe('Slash Command Parser (Feature 1)', () => {
   it('parses @reviewground fix command', () => {
     assert.strictEqual(parseSlashCommand('@reviewground fix'), 'fix');
     assert.strictEqual(parseSlashCommand('@reviewground fix this issue'), 'fix');
+  });
+
+  it('parses conversational chat queries and questions', () => {
+    assert.strictEqual(parseSlashCommand('@reviewground why is this line vulnerable?'), 'chat');
+    assert.strictEqual(parseSlashCommand('/review ask can we use Redis here?'), 'chat');
+    assert.strictEqual(parseSlashCommand('@ReviewGround can you suggest an index?'), 'chat');
+    assert.strictEqual(extractChatQuery('@reviewground why is this line vulnerable?'), 'why is this line vulnerable?');
+    assert.strictEqual(extractChatQuery('/review ask can we use Redis here?'), 'can we use Redis here?');
   });
 
   it('parses /review slash commands', () => {

@@ -19,6 +19,7 @@ import {
   postDirectComment,
 } from './github/index.js';
 import { ProviderManager, ReviewOptions } from './providers/index.js';
+import { sanitizeDiffSecrets } from './utils/secretSanitizer.js';
 
 export interface SlashCommandConfig {
   githubToken: string;
@@ -52,13 +53,24 @@ export type SlashCommandType =
   | 'review-security'
   | 'review-performance'
   | 'review-standard'
+  | 'chat'
   | null;
+
+/**
+ * Extracts free-form conversational question text from PR comments.
+ */
+export function extractChatQuery(commentBody: string): string {
+  return commentBody
+    .replace(/@reviewground\s*(ask)?/i, '')
+    .replace(/\/review\s+ask/i, '')
+    .trim();
+}
 
 /**
  * Parses a PR comment body to extract a recognized ReviewGround slash command.
  */
 export function parseSlashCommand(commentBody: string): SlashCommandType {
-  const text = commentBody.trim().toLowerCase();
+  const text = commentBody.trim();
 
   if (/@reviewground\s+explain/i.test(text)) return 'explain';
   if (/@reviewground\s+fix/i.test(text)) return 'fix';
@@ -66,6 +78,8 @@ export function parseSlashCommand(commentBody: string): SlashCommandType {
   if (/\/review\s+security/i.test(text)) return 'review-security';
   if (/\/review\s+performance/i.test(text)) return 'review-performance';
   if (/\/review\s+standard/i.test(text)) return 'review-standard';
+  if (/\/review\s+ask\b/i.test(text)) return 'chat';
+  if (/@reviewground\b/i.test(text)) return 'chat';
   if (/\/review\b/i.test(text)) return 'review-standard';
 
   return null;
@@ -218,6 +232,59 @@ ${diff.slice(0, 28000)}
   await postOrUpdatePrComment(body, config.githubToken, config.repo, config.prNumber, commandTag);
 }
 
+async function executeChat(
+  config: SlashCommandConfig,
+  providerManager: ProviderManager,
+  options: ReviewOptions,
+  diff: string | null,
+  originalReview: string | null
+): Promise<void> {
+  const userQuery = extractChatQuery(config.commentBody);
+  if (!userQuery) {
+    await postDirectComment(
+      `> 🤖 **ReviewGround Assistant** — How can I help you with this PR? You can ask questions or run commands like:\n` +
+        `> - \`@reviewground explain\` (explain previous review findings)\n` +
+        `> - \`@reviewground fix\` (suggest complete code fixes)\n` +
+        `> - \`@reviewground can we optimize this SQL query?\`\n` +
+        `> - \`/review security\` (on-demand security audit)`,
+      config.repo,
+      config.githubToken,
+      config.prNumber
+    );
+    return;
+  }
+
+  const reviewContext = originalReview
+    ? `Previous Review Findings:\n${originalReview.slice(0, 2000)}\n\n`
+    : '';
+
+  const prompt = `You are a Principal Software Engineer & DevSecOps Lead assisting a developer on a Pull Request.
+
+${reviewContext}Git Diff:
+\`\`\`diff
+${(diff || '').slice(0, 16000)}
+\`\`\`
+
+The developer asked in a PR comment:
+"${userQuery}"
+
+Provide a direct, concise, and technically accurate answer (with markdown code blocks if proposing fixes). Be constructive and professional.`;
+
+  const response = await providerManager.executeReview(prompt, options);
+  if (!response) {
+    await postDirectComment(
+      `> 🤖 **ReviewGround Assistant** — Sorry, could not generate a response. Please check your AI API key.`,
+      config.repo,
+      config.githubToken,
+      config.prNumber
+    );
+    return;
+  }
+
+  const reply = `> 💬 **ReviewGround AI Assistant** · *${response.provider} (${response.model})*\n\n${response.text}\n\n---\n*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+  await postDirectComment(reply, config.repo, config.githubToken, config.prNumber);
+}
+
 // ──────────────────────────────────────────────
 // Main Handler
 // ──────────────────────────────────────────────
@@ -267,10 +334,12 @@ export async function handleSlashCommand(config: SlashCommandConfig): Promise<vo
     enableSearchGrounding: config.enableSearchGrounding !== false,
   };
 
-  const [diff, originalReview] = await Promise.all([
+  const [rawDiff, originalReview] = await Promise.all([
     getPullRequestDiff(config.repo, config.prNumber, config.githubToken, config.baseBranch || 'main').catch(() => null),
     fetchPrReviewComment(config.repo, config.githubToken, config.prNumber, commentTag).catch(() => null),
   ]);
+
+  const diff = rawDiff ? sanitizeDiffSecrets(rawDiff).sanitizedDiff : null;
 
   switch (command) {
     case 'explain':
@@ -279,6 +348,10 @@ export async function handleSlashCommand(config: SlashCommandConfig): Promise<vo
 
     case 'fix':
       await executeFix(config, providerManager, options, diff, originalReview);
+      break;
+
+    case 'chat':
+      await executeChat(config, providerManager, options, diff, originalReview);
       break;
 
     case 'review-full':
