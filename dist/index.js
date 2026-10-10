@@ -21066,7 +21066,33 @@ ${config2.truncatedDiff}
 }
 
 // src/metrics/costEstimator.ts
-var COST_PER_MILLION_TOKENS = {
+var MODEL_SPECIFIC_COST_PER_M = {
+  // Premium / Flagship models
+  "claude-3-opus": 15,
+  "claude-3-7-sonnet": 3,
+  "claude-3-5-sonnet": 3,
+  "gpt-4-turbo": 10,
+  "gpt-4o": 2.5,
+  "gemini-1.5-pro": 1.25,
+  "gemini-2.5-pro": 1.25,
+  "deepseek-reasoner": 0.55,
+  // Budget / Fast models
+  "claude-3-5-haiku": 0.8,
+  "claude-3-haiku": 0.25,
+  "gpt-4o-mini": 0.15,
+  "gpt-3.5-turbo": 0.5,
+  "gemini-1.5-flash": 0.075,
+  "gemini-2.0-flash": 0.1,
+  "gemini-2.0-flash-lite": 0.075,
+  "gemini-3.5-flash-lite": 0.075,
+  "gemini-3.1-flash-lite": 0.075,
+  "deepseek-chat": 0.14,
+  "qwen/qwen3.8-27b": 0.15,
+  "qwen-2.5-coder-32b-instruct": 0.15,
+  "openai/gpt-oss-120b": 0.15,
+  "openai/gpt-oss-20b": 0.05
+};
+var PROVIDER_FALLBACK_COST_PER_M = {
   gemini: 0.1,
   openai: 0.15,
   anthropic: 0.8,
@@ -21075,12 +21101,24 @@ var COST_PER_MILLION_TOKENS = {
   openrouter: 0.1,
   custom: 0
 };
+function resolveCostPerMillion(model, provider) {
+  const normalizedModel = (model || "").toLowerCase().trim();
+  if (MODEL_SPECIFIC_COST_PER_M[normalizedModel] !== void 0) {
+    return MODEL_SPECIFIC_COST_PER_M[normalizedModel];
+  }
+  for (const [pattern, cost] of Object.entries(MODEL_SPECIFIC_COST_PER_M)) {
+    if (normalizedModel.includes(pattern)) {
+      return cost;
+    }
+  }
+  const providerKey = (provider || "").toLowerCase().split(" ")[0] ?? "custom";
+  return PROVIDER_FALLBACK_COST_PER_M[providerKey] ?? 0.15;
+}
 function generateCostFooter(input2) {
   const inputTokensEst = Math.ceil(input2.diffLength / 4);
   const outputTokensEst = Math.ceil(input2.responseLength / 4);
   const totalTokens = inputTokensEst + outputTokensEst;
-  const providerKey = input2.provider.toLowerCase().split(" ")[0] ?? "custom";
-  const costPerM = COST_PER_MILLION_TOKENS[providerKey] ?? 0.15;
+  const costPerM = resolveCostPerMillion(input2.model, input2.provider);
   const estimatedCostUsd = totalTokens / 1e6 * costPerM;
   const latencyMs = input2.latencyMs ?? 0;
   const latencyStr = latencyMs > 0 ? `${(latencyMs / 1e3).toFixed(1)}s` : "\u2014";

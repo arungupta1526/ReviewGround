@@ -585,6 +585,74 @@ flowchart TD
     STICKY_FIND -- "Not Found" --> CREATE
 ```
 
+<p align="center">
+  <em>High-resolution architecture renders available in <a href="./images/architecture-diagram.svg">SVG format</a> and <a href="./images/architecture-diagram.png">PNG format</a>.</em>
+</p>
+
+---
+
+## 📂 Repository & Modular Architecture
+
+ReviewGround is architected around domain-driven, single-responsibility modules adhering to strict file-size limits (<350 lines per module):
+
+```text
+reviewground/
+├── .github/
+│   ├── workflows/             # CI testing & Release Please release automation
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── dependabot.yml
+├── images/                    # Visual assets & architecture diagrams (.mmd, .svg, .png)
+│   ├── architecture-diagram.mmd
+│   ├── architecture-diagram.svg
+│   ├── architecture-diagram.png
+│   ├── pr-1-click-code-suggestion.png
+│   ├── pr-description-risk-badge.png
+│   ├── pr-sticky-patch-history.png
+│   └── pr-sticky-review-comment.png
+├── src/
+│   ├── github/                # 🐙 GitHub REST API integration
+│   │   ├── checks.ts          # GitHub Check Run gates & PR description updates
+│   │   ├── comments.ts        # Diff fetching, inline suggestions & comment management
+│   │   ├── stickyComment.ts   # In-place sticky comment update lifecycle
+│   │   ├── workflowJobs.ts    # GitHub Actions API workflow run & stage duration tracking
+│   │   └── index.ts
+│   ├── metrics/               # ⚡ Cost, latency & token usage calculations
+│   │   ├── costEstimator.ts   # Model-aware pricing & cost transparency footer
+│   │   └── index.ts
+│   ├── prompts/               # 🧠 Prompt engineering & guideline loaders
+│   │   ├── reviewPrompt.ts    # Provider-optimized prompts (XML/JSON/Markdown) & OWASP injection
+│   │   └── index.ts
+│   ├── providers/             # 🔌 BYOK Multi-Provider Engine (Native fetch adapters)
+│   │   ├── anthropic.ts       # Anthropic Claude 3.5 Haiku/Sonnet adapter
+│   │   ├── custom.ts          # OpenAI-compatible custom endpoints (vLLM, Ollama)
+│   │   ├── deepseek.ts        # DeepSeek V3 / R1 reasoning adapter
+│   │   ├── gemini.ts          # Google Gemini adapter with Google Search grounding
+│   │   ├── groq.ts            # Groq ultra-fast LPU inference adapter
+│   │   ├── openai.ts          # OpenAI GPT-4o / GPT-4o-mini adapter
+│   │   ├── openrouter.ts      # OpenRouter aggregator adapter
+│   │   ├── types.ts           # Provider interfaces & response contracts
+│   │   └── index.ts           # ProviderManager with auto-detection & fallback chains
+│   ├── utils/
+│   │   └── fetchWithRetry.ts  # Native exponential backoff with jitter
+│   ├── diffPrioritizer.ts     # 🎯 Smart diff prioritization (P0 auth/APIs, P2 locks/assets)
+│   ├── packageRegistry.ts     # 📦 Multi-ecosystem real-time registry verification (npm, PyPI, crates, go)
+│   ├── prDescriber.ts         # 📝 PR description & walkthrough table generator
+│   ├── reviewer.ts            # 🛡️ Core review orchestrator
+│   ├── slashCommands.ts       # 💬 Interactive PR comments dispatcher (@reviewground explain/fix)
+│   ├── summary.ts             # 🚦 Post-CI verification summary generator
+│   ├── testCoverageDetector.ts# 🧪 Missing unit test detection & stub suggestions
+│   └── index.ts               # 🚀 GitHub Action entry point
+├── test/                      # 🧪 Unit & invariant test suites (100% passing)
+│   ├── features.test.ts       # Tests for registry verification, diff prioritization, test coverage
+│   ├── prDescriber.test.ts    # Tests for PR description generation & body merging
+│   ├── providers.test.ts      # Tests for multi-provider BYOK routing & fallbacks
+│   ├── reviewer.test.ts       # Tests for review engine, inline suggestions & Zod validation
+│   └── summary.test.ts        # Tests for CI summary generation, durations & badges
+├── action.yml                 # GitHub Action metadata & input definitions (<125 char description)
+├── package.json
+└── tsconfig.json
+```
+
 ---
 
 ## 🚀 Key Architectural Pillars
