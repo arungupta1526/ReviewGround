@@ -4,7 +4,7 @@
  * preserving existing AI review sections and avoiding noisy duplicate comments.
  */
 
-import { DEFAULT_COMMENT_TAG, CI_SECTION_HEADER } from './comments.js';
+import { DEFAULT_COMMENT_TAG, CI_SECTION_HEADER, validateRepo } from './comments.js';
 
 export async function updateOrCreateStickyComment(
   ciSummaryMarkdown: string,
@@ -17,6 +17,7 @@ export async function updateOrCreateStickyComment(
     console.log('ℹ️  Skipping PR comment update: Missing GITHUB_TOKEN, PR_NUMBER, or REPO_FULL_NAME.');
     return;
   }
+  validateRepo(repo);
 
   const headers = {
     Authorization: `Bearer ${token}`,

@@ -10,6 +10,17 @@ import { z } from 'zod';
 export const DEFAULT_COMMENT_TAG = '<!-- reviewground-code-review -->';
 export const CI_SECTION_HEADER = '### 🚦 CI Pipeline Results & Verification';
 
+export const REPO_REGEX = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+
+/**
+ * Validates repository format strictly to prevent SSRF and path traversal injection.
+ */
+export function validateRepo(repo: string): void {
+  if (!repo || !REPO_REGEX.test(repo.trim())) {
+    throw new Error(`Invalid repository format: "${repo}". Expected format: owner/repo`);
+  }
+}
+
 export const InlineSuggestionSchema = z.object({
   path: z.string().min(1),
   line: z.coerce.number().int().positive(),
@@ -29,31 +40,34 @@ export async function getPullRequestDiff(
   token?: string,
   baseBranch = 'main'
 ): Promise<string | null> {
-  // 1. Try local git diff with base branch
+  // 1. Try local git diff with base branch (5MB safe buffer guard)
   try {
     const diff = execSync(
       `git diff origin/${baseBranch}...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"`,
-      { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 }
+      { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
-  } catch {
-    // Continue to next fallback
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`ℹ️ Local base branch git diff failed or exceeded buffer limit: ${msg}`);
   }
 
-  // 2. Try git diff HEAD~1
+  // 2. Try git diff HEAD~1 (5MB safe buffer guard)
   try {
     const diff = execSync(
       'git diff HEAD~1...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"',
-      { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 }
+      { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
-  } catch {
-    // Continue to GitHub API fallback
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`ℹ️ Local HEAD~1 git diff failed or exceeded buffer limit: ${msg}`);
   }
 
   // 3. Fallback to GitHub Pull Request diff API (handles fetch-depth: 1)
   if (repo && prNumber && token) {
     try {
+      validateRepo(repo);
       console.log(`🌐 Fetching PR diff directly from GitHub API (/repos/${repo}/pulls/${prNumber})...`);
       const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
         headers: {
@@ -88,6 +102,7 @@ export async function fetchPrReviewComment(
   prNumber: string,
   commentTag: string
 ): Promise<string | null> {
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -120,6 +135,7 @@ export async function postDirectComment(
   token: string,
   prNumber: string
 ): Promise<void> {
+  validateRepo(repo);
   const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
     method: 'POST',
     headers: {
@@ -147,6 +163,7 @@ export async function postInlineSuggestions(
   prNumber: string
 ): Promise<void> {
   if (suggestions.length === 0) return;
+  validateRepo(repo);
 
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -171,6 +188,12 @@ export async function postInlineSuggestions(
 
     for (const item of suggestions.slice(0, 5)) {
       if (!item.path || !item.line || !item.suggestion) continue;
+
+      // CWE-284 path traversal security check
+      if (item.path.includes('..') || item.path.startsWith('/') || item.path.startsWith('\\')) {
+        console.warn(`⚠️ Skipping inline suggestion with suspicious path traversal: ${item.path}`);
+        continue;
+      }
 
       const body = `### 🤖 ReviewGround 1-Click Code Suggestion\n\`\`\`suggestion\n${item.suggestion.trimEnd()}\n\`\`\``;
 
@@ -213,6 +236,7 @@ export async function postOrUpdatePrComment(
     console.log('ℹ️  Skipping PR comment: GITHUB_TOKEN, PR_NUMBER, or REPO_FULL_NAME not provided.');
     return;
   }
+  validateRepo(repo);
 
   const defaultCommentBody = `${markdown}\n\n${commentTag}`;
   const headers = {

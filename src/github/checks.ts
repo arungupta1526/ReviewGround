@@ -3,6 +3,8 @@
  * Handles PR description updates with AI summaries and GitHub Check Run gate creation.
  */
 
+import { validateRepo } from './comments.js';
+
 /**
  * Auto-updates the PR body with an AI-generated summary, changed-areas
  * checklist, and a risk level badge.
@@ -13,6 +15,7 @@ export async function updatePrDescription(
   repo: string,
   prNumber: string
 ): Promise<void> {
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -86,6 +89,7 @@ export async function createCheckRun(
   repo: string,
   prNumber: string
 ): Promise<void> {
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',

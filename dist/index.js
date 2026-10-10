@@ -40802,6 +40802,12 @@ function date4(params) {
 // src/github/comments.ts
 var DEFAULT_COMMENT_TAG = "<!-- reviewground-code-review -->";
 var CI_SECTION_HEADER = "### \u{1F6A6} CI Pipeline Results & Verification";
+var REPO_REGEX = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+function validateRepo(repo) {
+  if (!repo || !REPO_REGEX.test(repo.trim())) {
+    throw new Error(`Invalid repository format: "${repo}". Expected format: owner/repo`);
+  }
+}
 var InlineSuggestionSchema = external_exports.object({
   path: external_exports.string().min(1),
   line: external_exports.coerce.number().int().positive(),
@@ -40812,21 +40818,26 @@ async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
   try {
     const diff = (0, import_child_process.execSync)(
       `git diff origin/${baseBranch}...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"`,
-      { encoding: "utf-8", maxBuffer: 1024 * 1024 * 10 }
+      { encoding: "utf-8", maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`\u2139\uFE0F Local base branch git diff failed or exceeded buffer limit: ${msg}`);
   }
   try {
     const diff = (0, import_child_process.execSync)(
       'git diff HEAD~1...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"',
-      { encoding: "utf-8", maxBuffer: 1024 * 1024 * 10 }
+      { encoding: "utf-8", maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`\u2139\uFE0F Local HEAD~1 git diff failed or exceeded buffer limit: ${msg}`);
   }
   if (repo && prNumber && token) {
     try {
+      validateRepo(repo);
       console.log(`\u{1F310} Fetching PR diff directly from GitHub API (/repos/${repo}/pulls/${prNumber})...`);
       const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
         headers: {
@@ -40850,6 +40861,7 @@ async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
   return null;
 }
 async function fetchPrReviewComment(repo, token, prNumber, commentTag) {
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -40872,6 +40884,7 @@ async function fetchPrReviewComment(repo, token, prNumber, commentTag) {
   return null;
 }
 async function postDirectComment(body, repo, token, prNumber) {
+  validateRepo(repo);
   const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
     method: "POST",
     headers: {
@@ -40890,6 +40903,7 @@ async function postDirectComment(body, repo, token, prNumber) {
 }
 async function postInlineSuggestions(suggestions, token, repo, prNumber) {
   if (suggestions.length === 0) return;
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -40910,6 +40924,10 @@ async function postInlineSuggestions(suggestions, token, repo, prNumber) {
     console.log(`\u{1F680} Posting up to 5 inline 1-click commit suggestion(s) to PR #${prNumber}...`);
     for (const item of suggestions.slice(0, 5)) {
       if (!item.path || !item.line || !item.suggestion) continue;
+      if (item.path.includes("..") || item.path.startsWith("/") || item.path.startsWith("\\")) {
+        console.warn(`\u26A0\uFE0F Skipping inline suggestion with suspicious path traversal: ${item.path}`);
+        continue;
+      }
       const body = `### \u{1F916} ReviewGround 1-Click Code Suggestion
 \`\`\`suggestion
 ${item.suggestion.trimEnd()}
@@ -40942,6 +40960,7 @@ async function postOrUpdatePrComment(markdown, token, repo, prNumber, commentTag
     console.log("\u2139\uFE0F  Skipping PR comment: GITHUB_TOKEN, PR_NUMBER, or REPO_FULL_NAME not provided.");
     return;
   }
+  validateRepo(repo);
   const defaultCommentBody = `${markdown}
 
 ${commentTag}`;
@@ -41014,6 +41033,7 @@ ${commentTag}`;
 
 // src/github/checks.ts
 async function createCheckRun(reviewText, token, repo, prNumber) {
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -41172,6 +41192,7 @@ async function updateOrCreateStickyComment(ciSummaryMarkdown, token, repo, prNum
     console.log("\u2139\uFE0F  Skipping PR comment update: Missing GITHUB_TOKEN, PR_NUMBER, or REPO_FULL_NAME.");
     return;
   }
+  validateRepo(repo);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
