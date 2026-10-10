@@ -4,13 +4,14 @@
  * posting direct replies, and posting 1-click inline commit suggestions.
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { z } from 'zod';
 
 export const DEFAULT_COMMENT_TAG = '<!-- reviewground-code-review -->';
 export const CI_SECTION_HEADER = '### 🚦 CI Pipeline Results & Verification';
 
 export const REPO_REGEX = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+export const BRANCH_REGEX = /^[a-zA-Z0-9_./-]+$/;
 
 /**
  * Validates repository format strictly to prevent SSRF and path traversal injection.
@@ -40,10 +41,23 @@ export async function getPullRequestDiff(
   token?: string,
   baseBranch = 'main'
 ): Promise<string | null> {
-  // 1. Try local git diff with base branch (5MB safe buffer guard)
+  if (baseBranch && !BRANCH_REGEX.test(baseBranch)) {
+    throw new Error(`Invalid branch format: "${baseBranch}"`);
+  }
+
+  // 1. Try local git diff with base branch (5MB safe buffer guard via execFileSync)
   try {
-    const diff = execSync(
-      `git diff origin/${baseBranch}...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"`,
+    const diff = execFileSync(
+      'git',
+      [
+        'diff',
+        `origin/${baseBranch}...HEAD`,
+        '--',
+        '.',
+        ':(exclude)package-lock.json',
+        ':(exclude)pnpm-lock.yaml',
+        ':(exclude)yarn.lock',
+      ],
       { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
@@ -52,10 +66,19 @@ export async function getPullRequestDiff(
     console.warn(`ℹ️ Local base branch git diff failed or exceeded buffer limit: ${msg}`);
   }
 
-  // 2. Try git diff HEAD~1 (5MB safe buffer guard)
+  // 2. Try git diff HEAD~1 (5MB safe buffer guard via execFileSync)
   try {
-    const diff = execSync(
-      'git diff HEAD~1...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"',
+    const diff = execFileSync(
+      'git',
+      [
+        'diff',
+        'HEAD~1...HEAD',
+        '--',
+        '.',
+        ':(exclude)package-lock.json',
+        ':(exclude)pnpm-lock.yaml',
+        ':(exclude)yarn.lock',
+      ],
       { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;

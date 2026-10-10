@@ -24,6 +24,17 @@ describe('GitHub API Security & Validation', () => {
     assert.strictEqual(REPO_REGEX.test('invalid'), false);
     assert.strictEqual(REPO_REGEX.test('/invalid/repo'), false);
   });
+
+  it('verifies BRANCH_REGEX prevents OS command injection characters', async () => {
+    const { BRANCH_REGEX } = await import('../src/github/comments.js');
+    assert.strictEqual(BRANCH_REGEX.test('main'), true);
+    assert.strictEqual(BRANCH_REGEX.test('feature/login-v2'), true);
+    assert.strictEqual(BRANCH_REGEX.test('fix_bug-1.0'), true);
+    assert.strictEqual(BRANCH_REGEX.test('main; rm -rf /'), false);
+    assert.strictEqual(BRANCH_REGEX.test('main && whoami'), false);
+    assert.strictEqual(BRANCH_REGEX.test('main`id`'), false);
+    assert.strictEqual(BRANCH_REGEX.test('main$(whoami)'), false);
+  });
 });
 
 describe('Token & Cost Transparency Estimator', () => {

@@ -40873,6 +40873,7 @@ async function resolvePreviousInlineSuggestions(repo, token, prNumber) {
 var DEFAULT_COMMENT_TAG = "<!-- reviewground-code-review -->";
 var CI_SECTION_HEADER = "### \u{1F6A6} CI Pipeline Results & Verification";
 var REPO_REGEX = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+var BRANCH_REGEX = /^[a-zA-Z0-9_./-]+$/;
 function validateRepo(repo) {
   if (!repo || !REPO_REGEX.test(repo.trim())) {
     throw new Error(`Invalid repository format: "${repo}". Expected format: owner/repo`);
@@ -40885,9 +40886,21 @@ var InlineSuggestionSchema = external_exports.object({
 });
 var InlineSuggestionsListSchema = external_exports.array(InlineSuggestionSchema);
 async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
+  if (baseBranch && !BRANCH_REGEX.test(baseBranch)) {
+    throw new Error(`Invalid branch format: "${baseBranch}"`);
+  }
   try {
-    const diff = (0, import_child_process.execSync)(
-      `git diff origin/${baseBranch}...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"`,
+    const diff = (0, import_child_process.execFileSync)(
+      "git",
+      [
+        "diff",
+        `origin/${baseBranch}...HEAD`,
+        "--",
+        ".",
+        ":(exclude)package-lock.json",
+        ":(exclude)pnpm-lock.yaml",
+        ":(exclude)yarn.lock"
+      ],
       { encoding: "utf-8", maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
@@ -40896,8 +40909,17 @@ async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
     console.warn(`\u2139\uFE0F Local base branch git diff failed or exceeded buffer limit: ${msg}`);
   }
   try {
-    const diff = (0, import_child_process.execSync)(
-      'git diff HEAD~1...HEAD -- . ":(exclude)package-lock.json" ":(exclude)pnpm-lock.yaml" ":(exclude)yarn.lock"',
+    const diff = (0, import_child_process.execFileSync)(
+      "git",
+      [
+        "diff",
+        "HEAD~1...HEAD",
+        "--",
+        ".",
+        ":(exclude)package-lock.json",
+        ":(exclude)pnpm-lock.yaml",
+        ":(exclude)yarn.lock"
+      ],
       { encoding: "utf-8", maxBuffer: 1024 * 1024 * 5 }
     );
     if (diff && diff.trim().length > 0) return diff;
