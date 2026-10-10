@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0](https://github.com/arungupta1526/ReviewGround/compare/v1.1.0...v1.2.0) - 2026-10-10
+
+### Features & Maintenance
+- **Automated Semver Release & Synchronization** — Synchronized version manifest and package dependencies with Google Release Please automated release cycle.
+
+---
+
 ## [1.1.0](https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0) - 2026-10-10
 
 ### Features & Additions
@@ -91,5 +98,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All 7 provider adapters now use shared `fetchWithRetry` instead of raw `fetch` + `AbortSignal.timeout` — adds automatic retry resilience with no behavior change for the happy path
 - `AGENTS.md` rule #7 added: mandatory CHANGELOG.md update required after every code change
 
+[1.2.0]: https://github.com/arungupta1526/ReviewGround/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/arungupta1526/ReviewGround/releases/tag/v1.0.0
