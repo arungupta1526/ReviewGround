@@ -429,6 +429,9 @@ jobs:
           # ── v1.3.0: Missing Unit Test Detection & Stubs ──────────────────
           enable-test-coverage-check: 'true'     # Warn on new exports lacking tests + suggest stubs (default: 'true')
 
+          # ── v1.3.1: CI Failure Gating & Anti-Noise Control ───────────────
+          skip-on-ci-failure: 'false'            # Pause deep AI review if build/test failed to prevent noise on broken code
+
           # ── v1.3.0: Automated PR Description & Walkthrough (Opt-In) ───────
           generate-pr-description: 'false'       # Auto-generate PR summary, walkthrough table & checklist
           enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & walkthrough table to PR body
@@ -483,9 +486,10 @@ flowchart TD
     end
 
     subgraph SLASH["1b. Slash Command Handler (mode: slash-command)"]
-        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain, fix / /review on-demand"]:::newfeature
+        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain, fix, chat / /review on-demand"]:::newfeature
         CMD_EXPLAIN["AI Explains Flagged Issues<br/>with Educational Context"]:::newfeature
         CMD_FIX["AI Generates Concrete Code Patch"]:::newfeature
+        CMD_CHAT["Conversational PR Chatbot<br/>Answers Any @reviewground Query"]:::newfeature
         CMD_REVIEW["On-Demand Focused Re-Review<br/>full, security, performance, standard"]:::newfeature
     end
 
@@ -497,19 +501,23 @@ flowchart TD
 
     subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
-        RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
+        RULES["Universal Repo Guidelines Auto-Ingestion<br/>.reviewground.yml, AGENTS.md, .cursorrules, CLAUDE.md"]:::config
         DETECT{"Auto-Detect Provider Priority<br/>Gemini → OpenAI → Claude → Groq → DeepSeek → OpenRouter → Custom"}:::config
+        CI_GATE{"CI Broken & skip-on-ci-failure?<br/>(build or test failed)"}:::safety
+        PAUSE_NOTICE["Post Advisory CI Pause Notice<br/>(Saves LLM Tokens & Noise)"]:::output
         KEYS_CHECK{"Any LLM Key Configured?<br/>(Secrets or Env)"}:::safety
         SETUP_NOTICE["Post Interactive Missing Key Setup Guide<br/>(1-Minute Setup Banner + Free Key Links)"]:::output
     end
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
         DIFF["Extract PR Diff (GitHub API / git diff)"]:::config
+        SANITIZER["Pre-Flight Diff Secret & PII Sanitizer<br/>Redact AWS, Stripe, GitHub, JWT Tokens"]:::newfeature
         PRIORITY["Smart Diff Prioritizer<br/>P0=auth/API/DB first, P1=standard, P2=assets/locks skip"]:::newfeature
         REGISTRY["Multi-Ecosystem Registry Grounding<br/>NPM + PyPI + Crates.io + Go module proxy"]:::grounding
         SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
         OWASP["OWASP Top 10 + CWE Taxonomy Injection<br/>Forces CWE-ID & OWASP category on security findings"]:::newfeature
-        PROMPT["Assemble Grounded Prompt + System Guardrails<br/>(Provider Format: XML/Schema/Markdown + Language)"]:::grounding
+        REPO_TREE["Lightweight Repo Tree Grounding<br/>Sibling File Structure Outline"]:::grounding
+        PROMPT["Assemble Grounded Prompt + System Guardrails<br/>Anti-Nitpick Filter & Severity Badges [BLOCKER], [WARNING]"]:::grounding
         RETRY["fetchWithRetry (Backoff + Jitter)"]:::llm
         CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
         FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
@@ -543,9 +551,9 @@ flowchart TD
     %% Trigger routing
     PR --> BOT
     COMMENT_EVT --> PARSE_CMD
-    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX
+    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX & CMD_CHAT
     PARSE_CMD --> CMD_REVIEW
-    CMD_EXPLAIN & CMD_FIX --> COMMENT_REPLY
+    CMD_EXPLAIN & CMD_FIX & CMD_CHAT --> COMMENT_REPLY
     CMD_REVIEW --> STICKY_FIND
     BOT -- "Yes" --> SKIP
     BOT -- "No" --> PARSE
@@ -554,14 +562,18 @@ flowchart TD
     DETECT -- "mode: describe" --> DIFF_DESC
     DIFF_DESC --> GEN_WALKTHROUGH
     GEN_WALKTHROUGH --> MERGE_BODY
-    DETECT --> KEYS_CHECK
+    DETECT --> CI_GATE
+    CI_GATE -- "CI Failed" --> PAUSE_NOTICE
+    CI_GATE -- "CI OK / Ignored" --> KEYS_CHECK
     KEYS_CHECK -- "No Keys" --> SETUP_NOTICE
     KEYS_CHECK -- "Keys Found" --> DIFF
-    DIFF --> PRIORITY
+    DIFF --> SANITIZER
+    SANITIZER --> PRIORITY
     PRIORITY --> REGISTRY
     REGISTRY --> SEARCH
     SEARCH --> OWASP
-    OWASP --> PROMPT
+    OWASP --> REPO_TREE
+    REPO_TREE --> PROMPT
     PROMPT --> CALL_PRIMARY
     CALL_PRIMARY --> RETRY
     RETRY --> FALLBACK_CHECK
@@ -635,12 +647,14 @@ reviewground/
 │   │   ├── types.ts           # Provider interfaces & response contracts
 │   │   └── index.ts           # ProviderManager with auto-detection & fallback chains
 │   ├── utils/
-│   │   └── fetchWithRetry.ts  # Native exponential backoff with jitter
+│   │   ├── fetchWithRetry.ts  # Native exponential backoff with jitter
+│   │   ├── repoContext.ts     # 🗂️ Lightweight repo structure grounder (prevents duplicate utilities)
+│   │   └── secretSanitizer.ts # 🔒 Pre-flight diff secret & PII redactor (AWS, Stripe, JWT, keys)
 │   ├── diffPrioritizer.ts     # 🎯 Smart diff prioritization (P0 auth/APIs, P2 locks/assets)
 │   ├── packageRegistry.ts     # 📦 Multi-ecosystem real-time registry verification (npm, PyPI, crates, go)
 │   ├── prDescriber.ts         # 📝 PR description & walkthrough table generator
 │   ├── reviewer.ts            # 🛡️ Core review orchestrator
-│   ├── slashCommands.ts       # 💬 Interactive PR comments dispatcher (@reviewground explain/fix)
+│   ├── slashCommands.ts       # 💬 Interactive PR comments dispatcher (@reviewground explain/fix/chat)
 │   ├── summary.ts             # 🚦 Post-CI verification summary generator
 │   ├── testCoverageDetector.ts# 🧪 Missing unit test detection & stub suggestions
 │   └── index.ts               # 🚀 GitHub Action entry point
@@ -649,7 +663,10 @@ reviewground/
 │   ├── github.test.ts         # Tests for repo sanitization, SSRF protection, token & cost calculation
 │   ├── prDescriber.test.ts    # Tests for PR description generation & body merging
 │   ├── providers.test.ts      # Tests for multi-provider BYOK routing & fallbacks
+│   ├── repoContext.test.ts    # Tests for lightweight repo tree grounding
+│   ├── reviewPrompt.test.ts   # Tests for universal guidelines auto-ingestion & anti-nitpick filters
 │   ├── reviewer.test.ts       # Tests for review engine, inline suggestions & Zod validation
+│   ├── secretSanitizer.test.ts# Tests for pre-flight diff secret & credential masking patterns
 │   └── summary.test.ts        # Tests for CI summary generation, durations & badges
 ├── action.yml                 # GitHub Action metadata & input definitions (<125 char description)
 ├── package.json
@@ -729,6 +746,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Smart Diff Priority** | `enable-smart-diff-priority` | `ENABLE_SMART_DIFF_PRIORITY` | `true` — P0 (auth/API/DB), P1 (standard), P2 (assets/locks) |
 | **OWASP Tagging** | `enable-owasp-tagging` | `ENABLE_OWASP_TAGGING` | `true` — tags security findings with CWE-ID & OWASP category |
 | **Test Coverage Check** | `enable-test-coverage-check` | `ENABLE_TEST_COVERAGE_CHECK` | `true` — warns when new exports lack unit tests + suggests stubs |
+| **Skip on CI Failure** | `skip-on-ci-failure` | `SKIP_ON_CI_FAILURE`, `REVIEWGROUND_SKIP_ON_CI_FAILURE` | `false` — pauses AI review if build or test fails to save tokens and prevent noise |
 | **Base Branch** | `base-branch` | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH` | `main` |
 | **LLM Temperature** | `temperature` | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE` | `0.2` |
 | **Max Tokens** | `max-tokens` | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS` | `2048` |
@@ -789,6 +807,8 @@ jobs:
 |---|---|
 | `@reviewground explain` | AI explains why flagged issues were raised, with context |
 | `@reviewground fix` | AI suggests a concrete code patch for detected issues |
+| `@reviewground <question>` | Ask any conversational question directly (e.g. `@reviewground can we use Redis here?`) |
+| `/review ask <question>` | Interactive conversational assistant for PR comment threads |
 | `/review full` | Triggers a full comprehensive re-review (all levels) |
 | `/review security` | Security-focused re-review (OWASP only) |
 | `/review performance` | Performance-focused re-review |
@@ -942,12 +962,21 @@ Enable/disable: `enable-test-coverage-check: 'true'` (default on).
 
 ---
 
-## 📋 Custom Repository Guidelines (`.reviewground.yml`)
+## 📋 Universal Team Guidelines & Rule Auto-Ingestion
 
-Add a `.reviewground.yml` (or `.github/reviewground.yml`) file to your repository root to enforce team-specific coding rules:
+ReviewGround automatically detects and ingests your repository's existing team standards with **zero configuration**:
+
+| Source File | Description | Priority |
+|---|---|:---:|
+| `.reviewground.yml` / `.reviewground.yaml` / `.github/reviewground.yml` | Dedicated ReviewGround rules file | **1** |
+| `AGENTS.md` | AI Agent & Developer Operating Standards | **2** |
+| `CLAUDE.md` | Claude Code instructions & conventions | **3** |
+| `.cursorrules` / `.cursor/rules` | Cursor IDE repository guidelines | **4** |
+| `.github/copilot-instructions.md` | GitHub Copilot team instructions | **5** |
+| `CONTRIBUTING.md` | Open-source contributing standards | **6** |
 
 ```yaml
-# .reviewground.yml
+# Example: .reviewground.yml
 rules:
   - "Prefer early returns and guard clauses over deep nesting."
   - "Every exported function in src/ must include JSDoc comments."
@@ -955,7 +984,28 @@ rules:
   - "All database queries must use parameterized statements."
 ```
 
-ReviewGround automatically detects this file and injects your repository rules directly into the AI prompt!
+---
+
+## 🔒 Pre-Flight Diff Secret & PII Sanitizer
+
+Before code diffs leave your GitHub Actions runner to reach external AI providers, ReviewGround runs a deterministic pre-flight sanitization pass to redact sensitive credentials:
+* **AWS Access Keys** (`AKIA...`) ➔ `[REDACTED_SECRET:AWS_KEY]`
+* **GitHub Tokens** (`ghp_...`, `github_pat_...`) ➔ `[REDACTED_SECRET:GITHUB_TOKEN]`
+* **Slack Tokens** (`xoxb-...`, `xoxp-...`) ➔ `[REDACTED_SECRET:SLACK_TOKEN]`
+* **OpenAI & Anthropic API Keys** (`sk-proj-...`, `sk-ant-...`) ➔ `[REDACTED_SECRET:...]`
+* **Private RSA/EC/SSH Keys** (`-----BEGIN PRIVATE KEY-----`) ➔ `[REDACTED_SECRET:PRIVATE_KEY]`
+* **Bearer JWT Tokens** (`Bearer eyJ...`) ➔ `Bearer [REDACTED_SECRET:JWT_TOKEN]`
+
+---
+
+## 🎯 Strict Anti-Nitpick Engine & Severity Badging
+
+To eliminate "proofreader fatigue" and comment noise, ReviewGround strictly enforces:
+* **Zero Linter Nitpicks:** The AI is strictly instructed to ignore formatting, whitespace, quotes, semicolons, and purely subjective variable names that linters already catch.
+* **Standardized Severity Badges:**
+  - 🚨 **`[BLOCKER]`**: High/critical security flaws, data corruption, fatal crashes, breaking regressions.
+  - ⚠️ **`[WARNING]`**: Performance bottlenecks, edge-case bugs, unhandled async rejections, resource leaks.
+  - 💡 **`[SUGGESTION]`**: Architectural improvements and missing test stubs (comprehensive mode only).
 
 ---
 

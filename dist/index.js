@@ -1072,14 +1072,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path2 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path && path[0] !== "/") {
-          path = `/${path}`;
+        if (path2 && path2[0] !== "/") {
+          path2 = `/${path2}`;
         }
-        return new URL(`${origin}${path}`);
+        return new URL(`${origin}${path2}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -1530,39 +1530,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path, origin }
+          request: { method, path: path2, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path);
+        debuglog("sending request to %s %s/%s", method, origin, path2);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path, origin },
+          request: { method, path: path2, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path,
+          path2,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path, origin }
+          request: { method, path: path2, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path);
+        debuglog("trailers received from %s %s/%s", method, origin, path2);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path, origin },
+          request: { method, path: path2, origin },
           error: error63
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path,
+          path2,
           error63.message
         );
       });
@@ -1611,9 +1611,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path, origin }
+            request: { method, path: path2, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path);
+          debuglog("sending request to %s %s/%s", method, origin, path2);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -1676,7 +1676,7 @@ var require_request = __commonJS({
     var kHandler = /* @__PURE__ */ Symbol("handler");
     var Request = class {
       constructor(origin, {
-        path,
+        path: path2,
         method,
         body,
         headers,
@@ -1691,11 +1691,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler) {
-        if (typeof path !== "string") {
+        if (typeof path2 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path[0] !== "/" && !(path.startsWith("http://") || path.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path2[0] !== "/" && !(path2.startsWith("http://") || path2.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path)) {
+        } else if (invalidPathRegex.test(path2)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -1761,7 +1761,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path, query) : path;
+        this.path = query ? buildURL(path2, query) : path2;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking == null ? false : blocking;
@@ -6447,7 +6447,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client, request) {
-      const { method, path, host, upgrade, blocking, reset } = request;
+      const { method, path: path2, host, upgrade, blocking, reset } = request;
       let { body, headers, contentLength } = request;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util.isFormDataLike(body)) {
@@ -6528,7 +6528,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      let header = `${method} ${path} HTTP/1.1\r
+      let header = `${method} ${path2} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -7059,7 +7059,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client, request) {
       const session = client[kHTTP2Session];
-      const { method, path, host, upgrade, expectContinue, signal, headers: reqHeaders } = request;
+      const { method, path: path2, host, upgrade, expectContinue, signal, headers: reqHeaders } = request;
       let { body } = request;
       if (upgrade) {
         util.errorRequest(client, request, new Error("Upgrade not supported for H2"));
@@ -7156,7 +7156,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path;
+      headers[HTTP2_HEADER_PATH] = path2;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body && typeof body.read === "function") {
@@ -7509,9 +7509,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path = search ? `${pathname}${search}` : pathname;
+        const path2 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path;
+        this.opts.path = path2;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -8746,10 +8746,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path = "/",
+          path: path2 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path;
+        opts.path = origin + path2;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL2(origin);
           headers.host = host;
@@ -10721,20 +10721,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path) {
-      if (typeof path !== "string") {
-        return path;
+    function safeUrl(path2) {
+      if (typeof path2 !== "string") {
+        return path2;
       }
-      const pathSegments = path.split("?");
+      const pathSegments = path2.split("?");
       if (pathSegments.length !== 2) {
-        return path;
+        return path2;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path, method, body, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path);
+    function matchKey(mockDispatch2, { path: path2, method, body, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path2);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -10756,7 +10756,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path }) => matchValue(safeUrl(path), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path2 }) => matchValue(safeUrl(path2), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -10794,9 +10794,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path, method, body, headers, query } = opts;
+      const { path: path2, method, body, headers, query } = opts;
       return {
-        path,
+        path: path2,
         method,
         body,
         headers,
@@ -11259,10 +11259,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path2, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path,
+            Path: path2,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -16143,9 +16143,9 @@ var require_util6 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path) {
-      for (let i = 0; i < path.length; ++i) {
-        const code = path.charCodeAt(i);
+    function validateCookiePath(path2) {
+      for (let i = 0; i < path2.length; ++i) {
+        const code = path2.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude DEL and non-ascii
         code === 59) {
@@ -18987,11 +18987,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path = opts.path;
+          let path2 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path = `/${path}`;
+            path2 = `/${path2}`;
           }
-          url2 = new URL(util.parseOrigin(url2).origin + path);
+          url2 = new URL(util.parseOrigin(url2).origin + path2);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -19552,10 +19552,10 @@ function error(message, properties = {}) {
 }
 
 // src/index.ts
-var fs7 = __toESM(require("fs"));
+var fs8 = __toESM(require("fs"));
 
 // src/reviewer.ts
-var fs5 = __toESM(require("fs"));
+var fs6 = __toESM(require("fs"));
 
 // src/utils/fetchWithRetry.ts
 async function fetchWithRetry(url2, init = {}, retries = 2, timeoutMs = 25e3) {
@@ -20655,9 +20655,9 @@ function generateTestStub(symbol2) {
 });`;
       }
       if (symbol2.symbolType === "endpoint") {
-        const [method, path] = symbol2.symbolName.split(" ");
-        return `it('${method} ${path} \u2014 should respond with 200', async () => {
-  const res = await request(app).${method?.toLowerCase() ?? "get"}('${path}');
+        const [method, path2] = symbol2.symbolName.split(" ");
+        return `it('${method} ${path2} \u2014 should respond with 200', async () => {
+  const res = await request(app).${method?.toLowerCase() ?? "get"}('${path2}');
   expect(res.status).toBe(200);
 });`;
       }
@@ -20929,18 +20929,32 @@ ${generatedMarkdown}
 
 // src/prompts/reviewPrompt.ts
 var fs4 = __toESM(require("fs"));
+var ANTI_NITPICK_RULE = "\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.";
+var SEVERITY_BADGES_INSTRUCTION = "\nSEVERITY RATING FORMAT: Prefix each finding with one of these standardized severity badges:\n- \u{1F6A8} **[BLOCKER]**: High/critical security vulnerabilities, data loss, crashes, or severe regressions.\n- \u26A0\uFE0F **[WARNING]**: Performance bottlenecks, resource leaks, edge-case bugs, or unhandled errors.\n- \u{1F4A1} **[SUGGESTION]**: Architectural enhancements or missing test coverage stubs (comprehensive mode only).\nDo NOT report low-value style opinions or manufacture non-existent issues.";
 var REVIEW_FOCUS_MAP = {
-  critical: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements.",
-  standard: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks.",
-  comprehensive: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Code style, readability, naming conventions, and documentation gaps.\n5. Test coverage gaps and missing edge-case test scenarios.\n6. Direct, actionable code fixes with concise diff blocks."
+  critical: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements." + ANTI_NITPICK_RULE,
+  standard: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks." + ANTI_NITPICK_RULE,
+  comprehensive: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Code architecture, readability, naming conventions, and documentation gaps.\n5. Test coverage gaps and missing edge-case test scenarios.\n6. Direct, actionable code fixes with concise diff blocks."
 };
-function loadCustomGuidelines() {
-  for (const filename of [".reviewground.yml", ".reviewground.yaml", ".github/reviewground.yml"]) {
+var GUIDELINE_CANDIDATES = [
+  ".reviewground.yml",
+  ".reviewground.yaml",
+  ".github/reviewground.yml",
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".cursorrules",
+  ".cursor/rules",
+  ".github/copilot-instructions.md",
+  "CONTRIBUTING.md"
+];
+function loadCustomGuidelines(maxChars = 4e3) {
+  for (const filename of GUIDELINE_CANDIDATES) {
     if (fs4.existsSync(filename)) {
       try {
-        const content = fs4.readFileSync(filename, "utf-8").trim();
-        if (content) {
-          console.log(`\u{1F4CB} Loaded custom review guidelines from ${filename}`);
+        const raw = fs4.readFileSync(filename, "utf-8").trim();
+        if (raw) {
+          const content = raw.length > maxChars ? raw.slice(0, maxChars) + "\n... [guidelines truncated to token ceiling] ..." : raw;
+          console.log(`\u{1F4CB} Loaded custom review guidelines from ${filename} (${content.length} chars)`);
           return `
 Repository Custom Rules & Guidelines (${filename}):
 ${content}
@@ -20970,14 +20984,16 @@ Always cite the exact CWE-ID and OWASP category when security issues are found.
 IMPORTANT: Write your entire review response in the following language: ${lang}.
 ` : "";
   const packageGroundTruthNote = config2.packageGroundTruthNote || "";
+  const repoContext = config2.repoContext || "";
   const activeProviderName = (config2.provider || "").toLowerCase();
   const modelName = (config2.model || "").toLowerCase();
+  const contextInstructions = `${packageGroundTruthNote}${customGuidelines}${repoContext}${SEVERITY_BADGES_INSTRUCTION}${owaspInstruction}${languageInstruction}`;
   if (activeProviderName === "anthropic" || modelName.startsWith("claude")) {
     return `<instructions>
 You are a Principal Software Engineer &amp; DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 If the code looks solid and has no issues at this review level, respond with "\u2705 All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions:
@@ -20998,7 +21014,7 @@ Task: Analyze the git diff below and produce a structured code review.
 
 Review focus:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 Response format:
 - Start with a brief executive summary (1-2 sentences).
 - Use markdown sections (## Bugs, ## Security, ## Performance, etc.) as appropriate for this review level.
@@ -21024,7 +21040,7 @@ Analyze the following git diff.
 
 ## Review Focus
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 ## Instructions
 - If the code is clean, say: "\u2705 All changes look clean, performant, and secure!" followed by 2 bullet points.
 - Otherwise, list findings grouped under ### headers (Bugs, Security, Performance, etc.).
@@ -21044,7 +21060,7 @@ ${config2.truncatedDiff}
   return `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 If the code looks solid and has no issues at this review level, respond with "\u2705 All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
@@ -21189,6 +21205,171 @@ function generateCostFooter(input2) {
 > \u26A1 **ReviewGround** | Model: \`${input2.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} (This Run) | Latency: ${latencyStr}  
 > \u{1F4B0} **Cumulative PR Spend: ~$${cumulativeCostUsd.toFixed(4)} (${history.length} CI Runs, ${cumulativeTokens.toLocaleString()} tokens total)**  
 ` + historyTable + `> *Saved ~$20\u201350/mo vs proprietary AI review bots*` + historyMeta;
+}
+
+// src/utils/secretSanitizer.ts
+var SECRET_PATTERNS = [
+  {
+    name: "AWS_ACCESS_KEY",
+    regex: /\b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b/g,
+    replacement: "[REDACTED_SECRET:AWS_KEY]"
+  },
+  {
+    name: "GITHUB_TOKEN",
+    regex: /\b(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{82}|gho_[a-zA-Z0-9]{36}|ghs_[a-zA-Z0-9]{36})\b/g,
+    replacement: "[REDACTED_SECRET:GITHUB_TOKEN]"
+  },
+  {
+    name: "SLACK_TOKEN",
+    regex: /\bxox[baprs]-[0-9a-zA-Z]{10,48}\b/g,
+    replacement: "[REDACTED_SECRET:SLACK_TOKEN]"
+  },
+  {
+    name: "OPENAI_KEY",
+    regex: /\bsk-proj-[a-zA-Z0-9_-]{48,}\b|\bsk-[a-zA-Z0-9]{48,}\b/g,
+    replacement: "[REDACTED_SECRET:OPENAI_KEY]"
+  },
+  {
+    name: "ANTHROPIC_KEY",
+    regex: /\bsk-ant-[a-zA-Z0-9_-]{48,}\b/g,
+    replacement: "[REDACTED_SECRET:ANTHROPIC_KEY]"
+  },
+  {
+    name: "STRIPE_KEY",
+    regex: /\b(sk_live_[0-9a-zA-Z]{24,}|rk_live_[0-9a-zA-Z]{24,}|pk_live_[0-9a-zA-Z]{24,})\b/g,
+    replacement: "[REDACTED_SECRET:STRIPE_KEY]"
+  },
+  {
+    name: "GOOGLE_API_KEY",
+    regex: /\bAIza[0-9A-Za-z\\-_]{35}\b/g,
+    replacement: "[REDACTED_SECRET:GOOGLE_API_KEY]"
+  },
+  {
+    name: "HUGGINGFACE_TOKEN",
+    regex: /\bhf_[a-zA-Z0-9]{34,}\b/g,
+    replacement: "[REDACTED_SECRET:HUGGINGFACE_TOKEN]"
+  },
+  {
+    name: "SENDGRID_KEY",
+    regex: /\bSG\.[a-zA-Z0-9_\-]{22}\.[a-zA-Z0-9_\-]{43}\b/g,
+    replacement: "[REDACTED_SECRET:SENDGRID_KEY]"
+  },
+  {
+    name: "TWILIO_KEY",
+    regex: /\bSK[0-9a-fA-F]{32}\b/g,
+    replacement: "[REDACTED_SECRET:TWILIO_KEY]"
+  },
+  {
+    name: "DISCORD_BOT_TOKEN",
+    regex: /\b[MN][A-Za-z\d]{23,25}\.[\w-]{6}\.[\w-]{27,}\b/g,
+    replacement: "[REDACTED_SECRET:DISCORD_TOKEN]"
+  },
+  {
+    name: "POSTMAN_KEY",
+    regex: /\bPMAK-[a-zA-Z0-9]{24,}\b/g,
+    replacement: "[REDACTED_SECRET:POSTMAN_KEY]"
+  },
+  {
+    name: "PRIVATE_KEY",
+    regex: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g,
+    replacement: "[REDACTED_SECRET:PRIVATE_KEY]"
+  },
+  {
+    name: "JWT_TOKEN",
+    regex: /\b(Bearer\s+)?eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g,
+    replacement: "$1[REDACTED_SECRET:JWT_TOKEN]"
+  },
+  {
+    name: "GENERIC_ASSIGNED_KEY",
+    regex: /((?:api_?key|auth_?token|secret_?key|access_?token|client_?secret)\s*[:=]\s*["'])(?:(?!\$\{)[a-zA-Z0-9_\-]{24,})(["'])/gi,
+    replacement: "$1[REDACTED_SECRET:GENERIC_KEY]$2"
+  }
+];
+function sanitizeDiffSecrets(diffText) {
+  if (!diffText || typeof diffText !== "string") {
+    return { sanitizedDiff: "", redactedCount: 0, redactedTypes: [] };
+  }
+  let sanitized = diffText;
+  let totalRedacted = 0;
+  const typesDetected = /* @__PURE__ */ new Set();
+  for (const { name, regex, replacement } of SECRET_PATTERNS) {
+    const matches = sanitized.match(regex);
+    if (matches && matches.length > 0) {
+      totalRedacted += matches.length;
+      typesDetected.add(name);
+      sanitized = sanitized.replace(regex, replacement);
+    }
+  }
+  return {
+    sanitizedDiff: sanitized,
+    redactedCount: totalRedacted,
+    redactedTypes: Array.from(typesDetected)
+  };
+}
+
+// src/utils/repoContext.ts
+var fs5 = __toESM(require("fs"));
+var path = __toESM(require("path"));
+var IGNORED_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  ".github",
+  "dist",
+  "build",
+  ".next",
+  ".turbo",
+  "coverage",
+  "vendor",
+  "__pycache__"
+]);
+function extractChangedFilesFromDiff(diffText) {
+  if (!diffText) return [];
+  const files = [];
+  const regex = /^diff --git a\/(.+?) b\//gm;
+  let match;
+  while ((match = regex.exec(diffText)) !== null) {
+    if (match[1] && !files.includes(match[1])) {
+      files.push(match[1]);
+    }
+  }
+  return files;
+}
+function buildRepoContext(diffText, options = {}) {
+  const maxDirs = options.maxDirs ?? 5;
+  const maxFilesPerDir = options.maxFilesPerDir ?? 8;
+  const changedFiles = extractChangedFilesFromDiff(diffText);
+  if (changedFiles.length === 0) return "";
+  const parentDirs = /* @__PURE__ */ new Set();
+  for (const file2 of changedFiles) {
+    const dir = path.dirname(file2);
+    if (dir && dir !== "." && !IGNORED_DIRS.has(dir.split(path.sep)[0])) {
+      parentDirs.add(dir);
+    }
+  }
+  if (parentDirs.size === 0) return "";
+  const dirOutlines = [];
+  let count = 0;
+  for (const dir of parentDirs) {
+    if (count >= maxDirs) break;
+    if (!fs5.existsSync(dir)) continue;
+    try {
+      const stat2 = fs5.statSync(dir);
+      if (!stat2.isDirectory()) continue;
+      const entries = fs5.readdirSync(dir, { withFileTypes: true });
+      const siblingFiles = entries.filter((e) => e.isFile() && !e.name.startsWith(".")).map((e) => e.name).slice(0, maxFilesPerDir);
+      if (siblingFiles.length > 0) {
+        dirOutlines.push(`- ${dir}/: [${siblingFiles.join(", ")}]`);
+        count++;
+      }
+    } catch {
+    }
+  }
+  if (dirOutlines.length === 0) return "";
+  return `
+Existing Project Structure (Relevant Directories):
+` + dirOutlines.join("\n") + `
+(Leverage existing utilities and modules shown above; avoid reinventing duplicate helper functions.)
+`;
 }
 
 // src/github/comments.ts
@@ -22010,10 +22191,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path) {
-  if (!path)
+function getElementAtPath(obj, path2) {
+  if (!path2)
     return obj;
-  return path.reduce((acc, key) => acc?.[key], obj);
+  return path2.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -22353,11 +22534,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path, issues) {
+function prefixIssues(path2, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path);
+    iss.path.unshift(path2);
     return iss;
   });
 }
@@ -22807,16 +22988,16 @@ function flattenError(error63, mapper = (issue3) => issue3.message) {
 }
 function formatError(error63, mapper = (issue3) => issue3.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error64, path = []) => {
+  const processError = (error64, path2 = []) => {
     for (const issue3 of error64.issues) {
       if (issue3.code === "invalid_union" && issue3.errors.length) {
-        issue3.errors.map((issues) => processError({ issues }, [...path, ...issue3.path]));
+        issue3.errors.map((issues) => processError({ issues }, [...path2, ...issue3.path]));
       } else if (issue3.code === "invalid_key") {
-        processError({ issues: issue3.issues }, [...path, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
       } else if (issue3.code === "invalid_element") {
-        processError({ issues: issue3.issues }, [...path, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
       } else {
-        const fullpath = [...path, ...issue3.path];
+        const fullpath = [...path2, ...issue3.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue3));
         } else {
@@ -22855,17 +23036,17 @@ function formatError(error63, mapper = (issue3) => issue3.message) {
 }
 function treeifyError(error63, mapper = (issue3) => issue3.message) {
   const result = { errors: [] };
-  const processError = (error64, path = []) => {
+  const processError = (error64, path2 = []) => {
     var _a3;
     for (const issue3 of error64.issues) {
       if (issue3.code === "invalid_union" && issue3.errors.length) {
-        issue3.errors.map((issues) => processError({ issues }, [...path, ...issue3.path]));
+        issue3.errors.map((issues) => processError({ issues }, [...path2, ...issue3.path]));
       } else if (issue3.code === "invalid_key") {
-        processError({ issues: issue3.issues }, [...path, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
       } else if (issue3.code === "invalid_element") {
-        processError({ issues: issue3.issues }, [...path, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
       } else {
-        const fullpath = [...path, ...issue3.path];
+        const fullpath = [...path2, ...issue3.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue3));
           continue;
@@ -22904,8 +23085,8 @@ function treeifyError(error63, mapper = (issue3) => issue3.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path) {
+  const path2 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path2) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -40007,13 +40188,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path = ref.slice(1).split("/").filter(Boolean);
-  if (path.length === 0) {
+  const path2 = ref.slice(1).split("/").filter(Boolean);
+  if (path2.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path[0] === defsKey) {
-    const key = path[1] === void 0 ? void 0 : decodeJSONPointerSegment(path[1]);
+  if (path2[0] === defsKey) {
+    const key = path2[1] === void 0 ? void 0 : decodeJSONPointerSegment(path2[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -41602,16 +41783,40 @@ async function runReview(config2 = {}) {
     }
     return null;
   }
+  if (config2.skipOnCiFailure && (config2.buildResult?.toLowerCase() === "failure" || config2.testResult?.toLowerCase() === "failure")) {
+    console.log("\u23F8\uFE0F CI build or test stage failed. Pausing AI code review per skip-on-ci-failure.");
+    if (token && repo && prNumber) {
+      const ciFailureNotice = `## \u{1F6E1}\uFE0F ReviewGround \u2014 AI Code Review Paused \u23F8\uFE0F
+
+> \u26A0\uFE0F **Deep AI Review Paused Due to Broken CI**
+> 
+> Critical CI pipeline checks failed:
+> - **Build Stage**: \`${config2.buildResult || "unknown"}\`
+> - **Test Stage**: \`${config2.testResult || "unknown"}\`
+> 
+> To prevent generating noise on broken/non-compiling code and save API tokens, automated AI review is paused until build and test errors are resolved. Push a fix to resume!
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+      await postOrUpdatePrComment(ciFailureNotice, token, repo, prNumber, commentTag);
+    }
+    return null;
+  }
   const rawDiff = await getPullRequestDiff(repo, prNumber, token, config2.baseBranch || "main");
   if (!rawDiff || rawDiff.trim().length === 0) {
     console.log("\u2139\uFE0F  No code changes found in diff. Skipping review.");
     return null;
   }
-  const diff = applyIgnorePatterns(rawDiff, config2.ignorePatterns);
-  if (!diff) {
+  const ignoredDiff = applyIgnorePatterns(rawDiff, config2.ignorePatterns);
+  if (!ignoredDiff) {
     console.log("\u2139\uFE0F  All changed files were excluded by ignore-patterns. Skipping review.");
     return null;
   }
+  const sanitizeResult = sanitizeDiffSecrets(ignoredDiff);
+  if (sanitizeResult.redactedCount > 0) {
+    console.log(`\u{1F512} Sanitized ${sanitizeResult.redactedCount} secret(s) (${sanitizeResult.redactedTypes.join(", ")}) from diff before dispatching to AI.`);
+  }
+  const diff = sanitizeResult.sanitizedDiff;
   let packageGroundTruthNote = "";
   if (config2.enableNpmVerify !== false || config2.enableMultiRegistryVerify !== false) {
     const registryResult = await verifyPackagesMultiRegistry(diff);
@@ -41639,6 +41844,7 @@ ${registryResult.notes.map((n) => `- ${n}`).join("\n")}
     }
   }
   console.log(`\u{1F916} Analyzing code diff (${truncatedDiff.length} characters)...`);
+  const repoContext = buildRepoContext(diff);
   const prompt = buildReviewPrompt({
     reviewLevel: config2.reviewLevel,
     reviewLanguage: config2.reviewLanguage,
@@ -41646,6 +41852,7 @@ ${registryResult.notes.map((n) => `- ${n}`).join("\n")}
     provider: config2.provider,
     model: config2.model,
     packageGroundTruthNote,
+    repoContext,
     truncatedDiff
   });
   const reviewOptions = {
@@ -41747,8 +41954,8 @@ ${cleanReviewText}${testCoverageSection}
   console.log(markdownOutput);
   console.log("=======================================================\n");
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
-  if (stepSummaryFile && fs5.existsSync(stepSummaryFile)) {
-    await fs5.promises.appendFile(stepSummaryFile, markdownOutput);
+  if (stepSummaryFile && fs6.existsSync(stepSummaryFile)) {
+    await fs6.promises.appendFile(stepSummaryFile, markdownOutput);
     console.log("\u2705 Review appended to GitHub Actions step summary.");
   }
   await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag);
@@ -41785,7 +41992,7 @@ ${cleanReviewText}${testCoverageSection}
 }
 
 // src/summary.ts
-var fs6 = __toESM(require("fs"));
+var fs7 = __toESM(require("fs"));
 function getStatusBadge(result) {
   switch (result?.toLowerCase()) {
     case "success":
@@ -42000,8 +42207,8 @@ async function runSummary(config2 = {}) {
   console.log(summaryMarkdown);
   console.log("====================================================\n");
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
-  if (stepSummaryFile && fs6.existsSync(stepSummaryFile)) {
-    await fs6.promises.appendFile(stepSummaryFile, `
+  if (stepSummaryFile && fs7.existsSync(stepSummaryFile)) {
+    await fs7.promises.appendFile(stepSummaryFile, `
 
 ${summaryMarkdown}
 `);
@@ -42012,14 +42219,19 @@ ${summaryMarkdown}
 }
 
 // src/slashCommands.ts
+function extractChatQuery(commentBody) {
+  return commentBody.replace(/@reviewground\s*(ask)?/i, "").replace(/\/review\s+ask/i, "").trim();
+}
 function parseSlashCommand(commentBody) {
-  const text = commentBody.trim().toLowerCase();
+  const text = commentBody.trim();
   if (/@reviewground\s+explain/i.test(text)) return "explain";
   if (/@reviewground\s+fix/i.test(text)) return "fix";
   if (/\/review\s+full/i.test(text)) return "review-full";
   if (/\/review\s+security/i.test(text)) return "review-security";
   if (/\/review\s+performance/i.test(text)) return "review-performance";
   if (/\/review\s+standard/i.test(text)) return "review-standard";
+  if (/\/review\s+ask\b/i.test(text)) return "chat";
+  if (/@reviewground\b/i.test(text)) return "chat";
   if (/\/review\b/i.test(text)) return "review-standard";
   return null;
 }
@@ -42152,6 +42364,54 @@ ${response.text}
 *Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
   await postOrUpdatePrComment(body, config2.githubToken, config2.repo, config2.prNumber, commandTag);
 }
+async function executeChat(config2, providerManager, options, diff, originalReview) {
+  const userQuery = extractChatQuery(config2.commentBody);
+  if (!userQuery) {
+    await postDirectComment(
+      `> \u{1F916} **ReviewGround Assistant** \u2014 How can I help you with this PR? You can ask questions or run commands like:
+> - \`@reviewground explain\` (explain previous review findings)
+> - \`@reviewground fix\` (suggest complete code fixes)
+> - \`@reviewground can we optimize this SQL query?\`
+> - \`/review security\` (on-demand security audit)`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const reviewContext = originalReview ? `Previous Review Findings:
+${originalReview.slice(0, 2e3)}
+
+` : "";
+  const prompt = `You are a Principal Software Engineer & DevSecOps Lead assisting a developer on a Pull Request.
+
+${reviewContext}Git Diff:
+\`\`\`diff
+${(diff || "").slice(0, 16e3)}
+\`\`\`
+
+The developer asked in a PR comment:
+"${userQuery}"
+
+Provide a direct, concise, and technically accurate answer (with markdown code blocks if proposing fixes). Be constructive and professional.`;
+  const response = await providerManager.executeReview(prompt, options);
+  if (!response) {
+    await postDirectComment(
+      `> \u{1F916} **ReviewGround Assistant** \u2014 Sorry, could not generate a response. Please check your AI API key.`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const reply = `> \u{1F4AC} **ReviewGround AI Assistant** \xB7 *${response.provider} (${response.model})*
+
+${response.text}
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+  await postDirectComment(reply, config2.repo, config2.githubToken, config2.prNumber);
+}
 async function handleSlashCommand(config2) {
   const command = parseSlashCommand(config2.commentBody);
   if (!command) {
@@ -42188,16 +42448,20 @@ async function handleSlashCommand(config2) {
     maxTokens: config2.maxTokens ?? 2048,
     enableSearchGrounding: config2.enableSearchGrounding !== false
   };
-  const [diff, originalReview] = await Promise.all([
+  const [rawDiff, originalReview] = await Promise.all([
     getPullRequestDiff(config2.repo, config2.prNumber, config2.githubToken, config2.baseBranch || "main").catch(() => null),
     fetchPrReviewComment(config2.repo, config2.githubToken, config2.prNumber, commentTag).catch(() => null)
   ]);
+  const diff = rawDiff ? sanitizeDiffSecrets(rawDiff).sanitizedDiff : null;
   switch (command) {
     case "explain":
       await executeExplain(config2, providerManager, options, originalReview);
       break;
     case "fix":
       await executeFix(config2, providerManager, options, diff, originalReview);
+      break;
+    case "chat":
+      await executeChat(config2, providerManager, options, diff, originalReview);
       break;
     case "review-full":
       await executeOnDemandReview(config2, providerManager, options, diff, "full", commentTag);
@@ -42246,9 +42510,9 @@ function resolvePrNumber() {
   const inputPr = getOptionalInput("pr-number", ["PR_NUMBER", "PULL_REQUEST_NUMBER"]);
   if (inputPr) return inputPr;
   const eventPath = process.env.GITHUB_EVENT_PATH;
-  if (eventPath && fs7.existsSync(eventPath)) {
+  if (eventPath && fs8.existsSync(eventPath)) {
     try {
-      const eventData = JSON.parse(fs7.readFileSync(eventPath, "utf-8"));
+      const eventData = JSON.parse(fs8.readFileSync(eventPath, "utf-8"));
       const prNumber = eventData.pull_request?.number || eventData.issue?.number;
       if (prNumber) return String(prNumber);
     } catch {
@@ -42271,9 +42535,9 @@ async function run() {
       let commentBody = "";
       let commentId;
       let commentAuthor;
-      if (eventPath && fs7.existsSync(eventPath)) {
+      if (eventPath && fs8.existsSync(eventPath)) {
         try {
-          const eventData = JSON.parse(fs7.readFileSync(eventPath, "utf-8"));
+          const eventData = JSON.parse(fs8.readFileSync(eventPath, "utf-8"));
           commentBody = eventData.comment?.body || "";
           commentId = eventData.comment?.id;
           commentAuthor = eventData.comment?.user?.login;
@@ -42408,7 +42672,10 @@ async function run() {
         reviewLanguage: getOptionalInput("review-language", ["REVIEWGROUND_REVIEW_LANGUAGE", "REVIEW_LANGUAGE"]) || "en",
         generatePrDescription: getBooleanInput("generate-pr-description", ["GENERATE_PR_DESCRIPTION", "REVIEWGROUND_GENERATE_PR_DESCRIPTION"], false) || getBooleanInput("enable-pr-description-update", ["ENABLE_PR_DESCRIPTION_UPDATE"], false),
         enablePrDescriptionUpdate: getBooleanInput("enable-pr-description-update", ["ENABLE_PR_DESCRIPTION_UPDATE"], false),
-        enableCheckRun: getBooleanInput("enable-check-run", ["ENABLE_CHECK_RUN"], false)
+        enableCheckRun: getBooleanInput("enable-check-run", ["ENABLE_CHECK_RUN"], false),
+        skipOnCiFailure: getBooleanInput("skip-on-ci-failure", ["SKIP_ON_CI_FAILURE", "REVIEWGROUND_SKIP_ON_CI_FAILURE"], false),
+        buildResult: getOptionalInput("build-result", ["BUILD_RESULT"]),
+        testResult: getOptionalInput("test-result", ["TEST_RESULT"])
       };
       console.log("\n--- \u{1F916} Starting AI Code Review ---");
       const reviewResult = await runReview(reviewConfig);
