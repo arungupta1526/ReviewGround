@@ -18,9 +18,10 @@ flowchart TD
     end
 
     subgraph SLASH["1b. Slash Command Handler (mode: slash-command)"]
-        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain, fix / /review on-demand"]:::newfeature
+        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain, fix, chat / /review on-demand"]:::newfeature
         CMD_EXPLAIN["AI Explains Flagged Issues<br/>with Educational Context"]:::newfeature
         CMD_FIX["AI Generates Concrete Code Patch"]:::newfeature
+        CMD_CHAT["Conversational PR Chatbot<br/>Answers Any @reviewground Query"]:::newfeature
         CMD_REVIEW["On-Demand Focused Re-Review<br/>full, security, performance, standard"]:::newfeature
     end
 
@@ -32,19 +33,23 @@ flowchart TD
 
     subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
-        RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
+        RULES["Universal Repo Guidelines Auto-Ingestion<br/>.reviewground.yml, AGENTS.md, .cursorrules, CLAUDE.md"]:::config
         DETECT{"Auto-Detect Provider Priority<br/>Gemini → OpenAI → Claude → Groq → DeepSeek → OpenRouter → Custom"}:::config
+        CI_GATE{"CI Broken & skip-on-ci-failure?<br/>(build or test failed)"}:::safety
+        PAUSE_NOTICE["Post Advisory CI Pause Notice<br/>(Saves LLM Tokens & Noise)"]:::output
         KEYS_CHECK{"Any LLM Key Configured?<br/>(Secrets or Env)"}:::safety
         SETUP_NOTICE["Post Interactive Missing Key Setup Guide<br/>(1-Minute Setup Banner + Free Key Links)"]:::output
     end
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
         DIFF["Extract PR Diff (GitHub API / git diff)"]:::config
+        SANITIZER["Pre-Flight Diff Secret & PII Sanitizer<br/>Redact AWS, Stripe, GitHub, JWT Tokens"]:::newfeature
         PRIORITY["Smart Diff Prioritizer<br/>P0=auth/API/DB first, P1=standard, P2=assets/locks skip"]:::newfeature
         REGISTRY["Multi-Ecosystem Registry Grounding<br/>NPM + PyPI + Crates.io + Go module proxy"]:::grounding
         SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
         OWASP["OWASP Top 10 + CWE Taxonomy Injection<br/>Forces CWE-ID & OWASP category on security findings"]:::newfeature
-        PROMPT["Assemble Grounded Prompt + System Guardrails<br/>(Provider Format: XML/Schema/Markdown + Language)"]:::grounding
+        REPO_TREE["Lightweight Repo Tree Grounding<br/>Sibling File Structure Outline"]:::grounding
+        PROMPT["Assemble Grounded Prompt + System Guardrails<br/>Anti-Nitpick Filter & Severity Badges [BLOCKER], [WARNING]"]:::grounding
         RETRY["fetchWithRetry (Backoff + Jitter)"]:::llm
         CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
         FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
@@ -78,9 +83,9 @@ flowchart TD
     %% Trigger routing
     PR --> BOT
     COMMENT_EVT --> PARSE_CMD
-    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX
+    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX & CMD_CHAT
     PARSE_CMD --> CMD_REVIEW
-    CMD_EXPLAIN & CMD_FIX --> COMMENT_REPLY
+    CMD_EXPLAIN & CMD_FIX & CMD_CHAT --> COMMENT_REPLY
     CMD_REVIEW --> STICKY_FIND
     BOT -- "Yes" --> SKIP
     BOT -- "No" --> PARSE
@@ -89,14 +94,18 @@ flowchart TD
     DETECT -- "mode: describe" --> DIFF_DESC
     DIFF_DESC --> GEN_WALKTHROUGH
     GEN_WALKTHROUGH --> MERGE_BODY
-    DETECT --> KEYS_CHECK
+    DETECT --> CI_GATE
+    CI_GATE -- "CI Failed" --> PAUSE_NOTICE
+    CI_GATE -- "CI OK / Ignored" --> KEYS_CHECK
     KEYS_CHECK -- "No Keys" --> SETUP_NOTICE
     KEYS_CHECK -- "Keys Found" --> DIFF
-    DIFF --> PRIORITY
+    DIFF --> SANITIZER
+    SANITIZER --> PRIORITY
     PRIORITY --> REGISTRY
     REGISTRY --> SEARCH
     SEARCH --> OWASP
-    OWASP --> PROMPT
+    OWASP --> REPO_TREE
+    REPO_TREE --> PROMPT
     PROMPT --> CALL_PRIMARY
     CALL_PRIMARY --> RETRY
     RETRY --> FALLBACK_CHECK
