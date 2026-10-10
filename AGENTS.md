@@ -54,8 +54,9 @@ This document establishes the mandatory architectural rules, Git workflows, secu
 2. **Self-Contained Bundle Rule (`dist/index.js`)**:
    - GitHub Actions runtime must be self-contained. Always bundle TypeScript code into a single zero-dependency production bundle (`dist/index.js`) using `esbuild`.
    - Never require end-users to run `npm install` inside their workflows to execute this action.
-3. **Root `action.yml` Standard**:
+3. **Root `action.yml` Standard & Marketplace Description Limit**:
    - `action.yml` must reside strictly in the repository root for GitHub Marketplace discovery.
+   - **Marketplace Description Ceiling (< 125 characters)**: The `description` field in `action.yml` MUST be strictly under 125 characters. GitHub Marketplace publishing validation automatically rejects releases if the description is 125 characters or longer.
    - Keep inputs, outputs, and branding (`icon: 'shield'`, `color: 'purple'`) accurate and documented.
 4. **Node 24 & TypeScript 7.0 Baseline**:
    - The project strictly targets **Node 24 LTS** and **TypeScript 7.0.2+**.
