@@ -499,7 +499,7 @@ flowchart TD
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
         DIFF["Extract PR Diff (GitHub API / git diff)"]:::config
-        PRIORITY["Smart Diff Prioritizer<br/>P0=auth/API/DB first | P1=standard | P2=assets/locks skip"]:::newfeature
+        PRIORITY["Smart Diff Prioritizer<br/>P0=auth/API/DB first, P1=standard, P2=assets/locks skip"]:::newfeature
         REGISTRY["Multi-Ecosystem Registry Grounding<br/>NPM + PyPI + Crates.io + Go module proxy"]:::grounding
         SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
         OWASP["OWASP Top 10 + CWE Taxonomy Injection<br/>Forces CWE-ID & OWASP category on security findings"]:::newfeature
@@ -514,7 +514,7 @@ flowchart TD
 
     subgraph POSTPROC["4. Post-Processing & Enrichment"]
         TEST_CHECK["Missing Test Coverage Detector<br/>Flags uncovered exports + suggests stubs (TS/JS/Py/Go)"]:::newfeature
-        COST_FOOTER["Token & Cost Transparency Footer<br/>Model | Est. Tokens | Est. USD Cost | Latency"]:::newfeature
+        COST_FOOTER["Token & Cost Transparency Footer<br/>Model • Est. Tokens • Est. USD Cost • Latency"]:::newfeature
     end
 
     subgraph GATES["5. Multi-Channel Outputs & Merge Gates"]
