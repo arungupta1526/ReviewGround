@@ -389,47 +389,62 @@ jobs:
 
       - uses: arungupta1526/ReviewGround@v1
         with:
-          # --- Core Execution & Git Controls ---
+          # ── Core Execution & Git Controls ────────────────────────────────
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          mode: 'all'                             # 'review' (AI only) | 'summary' (CI table only) | 'all' (both, default: 'all')
-          base-branch: 'main'                     # Target branch for diff calculation (default: 'main')
+          mode: 'all'                             # 'review' | 'summary' | 'all' | 'slash-command'
+          base-branch: 'main'                     # Target branch for diff (default: 'main')
 
-          # --- AI Review Depth & Customization ---
-          review-level: 'standard'               # 'critical' (security/bugs only) | 'standard' (default) | 'comprehensive' (all + style)
-          review-language: 'en'                  # Review language e.g. 'en', 'ja', 'es', 'de', 'zh', 'hi' (default: 'en')
+          # ── AI Review Depth & Customization ──────────────────────────────
+          review-level: 'standard'               # 'critical' | 'standard' (default) | 'comprehensive'
+          review-language: 'en'                  # BCP-47 language code e.g. 'en', 'ja', 'es', 'de', 'zh'
           temperature: '0.2'                     # Sampling temperature 0.0–1.0 (default: '0.2')
-          max-tokens: '2048'                     # Maximum response token length (default: '2048')
-          ignore-patterns: ''                    # Comma-separated globs to exclude e.g. 'dist/**,*.min.js' (default: none)
+          max-tokens: '2048'                     # Max response token length (default: '2048')
+          ignore-patterns: ''                    # Comma-separated globs e.g. 'dist/**,*.min.js'
 
-          # --- Grounding & Suggestions (Auto-Enabled by Default) ---
-          enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons (default: 'true')
-          enable-search-grounding: 'true'        # Google Search tool grounding for Gemini (default: 'true')
-          enable-npm-verify: 'true'              # Live registry.npmjs.org check to eliminate fake versions (default: 'true')
+          # ── Grounding & Inline Suggestions (on by default) ───────────────
+          enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons
+          enable-search-grounding: 'true'        # Google Search tool grounding for Gemini
+          enable-npm-verify: 'true'              # Live registry.npmjs.org anti-hallucination check
 
-          # --- Enterprise Merge Gates & Badges (Opt-In) ---
-          enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & summary to PR body (default: 'false')
-          enable-check-run: 'false'              # Create blocking pass/fail GitHub Check Run gate (default: 'false')
+          # ── v1.3.0: Multi-Ecosystem Registry Grounding ───────────────────
+          enable-multi-registry-verify: 'true'  # Also verify PyPI, Crates.io & Go module proxy (default: 'true')
 
-          # --- Multi-Provider Overrides (Optional) ---
-          provider: ''                           # Force specific provider: 'gemini' | 'groq' | 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'custom'
-          model: ''                              # Force specific model override e.g. 'deepseek-chat', 'gpt-4o'
-          fallback-models: ''                    # Custom comma-separated failover models (default: built-in chain)
+          # ── v1.3.0: Token & Cost Transparency Footer ─────────────────────
+          enable-cost-footer: 'true'             # Show est. tokens + cost + latency in sticky comment (default: 'true')
 
-          # --- Post-CI Status Verification (Optional Stage Inputs) ---
-          gitleaks-result: ''                    # e.g. ${{ needs.gitleaks.result }} (auto-discovered via API if omitted)
-          audit-result: ''                       # e.g. ${{ needs.security-audit.result }} (auto-discovered via API if omitted)
-          build-result: ''                       # e.g. ${{ needs.build.result }} (auto-discovered via API if omitted)
-          test-result: ''                        # e.g. ${{ needs.test.result }} (auto-discovered via API if omitted)
-          extra-stages: ''                       # Extra JSON stages e.g. '[{"name":"Deploy","result":"success"}]'
+          # ── v1.3.0: Smart Diff Priority Scoring for Large PRs ────────────
+          enable-smart-diff-priority: 'true'     # P0=auth/API/DB first, P2=assets/locks skipped (default: 'true')
+
+          # ── v1.3.0: OWASP Top 10 & CWE Taxonomy Tagging ─────────────────
+          enable-owasp-tagging: 'true'           # Tag security findings with CWE-ID & OWASP category (default: 'true')
+
+          # ── v1.3.0: Missing Unit Test Detection & Stubs ──────────────────
+          enable-test-coverage-check: 'true'     # Warn on new exports lacking tests + suggest stubs (default: 'true')
+
+          # ── Enterprise Merge Gates & Badges (Opt-In) ─────────────────────
+          enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & walkthrough table to PR body
+          enable-check-run: 'false'              # Create blocking pass/fail GitHub Check Run gate
+
+          # ── Multi-Provider Overrides (Optional) ──────────────────────────
+          provider: ''                           # Force: 'gemini' | 'groq' | 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'custom'
+          model: ''                              # Force model override e.g. 'deepseek-chat', 'gpt-4o'
+          fallback-models: ''                    # Custom comma-separated failover models
+
+          # ── Post-CI Status Verification (Optional Stage Inputs) ───────────
+          gitleaks-result: ''                    # e.g. ${{ needs.gitleaks.result }}
+          audit-result: ''                       # e.g. ${{ needs.security-audit.result }}
+          build-result: ''                       # e.g. ${{ needs.build.result }}
+          test-result: ''                        # e.g. ${{ needs.test.result }}
+          extra-stages: ''                       # e.g. '[{"name":"Deploy","result":"success"}]'
         env:
-          # --- BYOK Provider API Keys (Set any one or multiple in GitHub Secrets) ---
+          # ── BYOK Provider API Keys (set any one or multiple in GitHub Secrets) ──
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}         # For self-hosted endpoints (e.g. Ollama/vLLM)
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}         # Self-hosted endpoint (e.g. Ollama/vLLM)
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}           # API key for custom endpoint
 ```
 
@@ -440,7 +455,7 @@ jobs:
 
 ```mermaid
 flowchart TD
-    %% Custom Themed Color Palettes
+    %% Color Palettes
     classDef trigger fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
     classDef config fill:#181825,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
     classDef safety fill:#313244,stroke:#f9e2af,stroke-width:2px,color:#f9e2af;
@@ -449,41 +464,57 @@ flowchart TD
     classDef zod fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe;
     classDef output fill:#11261f,stroke:#a6e3a1,stroke-width:2px,color:#a6e3a1;
     classDef summary fill:#261828,stroke:#fab387,stroke-width:2px,color:#fab387;
+    classDef newfeature fill:#1f1a00,stroke:#f9e2af,stroke-width:2px,color:#f9e2af;
 
     subgraph TRIGGER["1. GitHub Event & Context Resolution"]
         PR["PR Event: opened / synchronize / reopened"]:::trigger
+        COMMENT_EVT["issue_comment Event<br/>@reviewground / /review commands"]:::trigger
         BOT{"Is PR from Automated Bot?<br/>(e.g. dependabot[bot])"}:::safety
         SKIP["Graceful Skip (Preserves CI Build Green)"]:::safety
+    end
+
+    subgraph SLASH["1b. Slash Command Handler (mode: slash-command)"]
+        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain|fix / /review full|security|performance"]:::newfeature
+        CMD_EXPLAIN["AI Explains Flagged Issues<br/>with Educational Context"]:::newfeature
+        CMD_FIX["AI Generates Concrete Code Patch"]:::newfeature
+        CMD_REVIEW["On-Demand Focused Re-Review<br/>full | security | performance | standard"]:::newfeature
     end
 
     subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
         RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
-        DETECT{"Auto-Detect Provider Priority<br/>Gemini ➔ OpenAI ➔ Claude ➔ Groq ➔ DeepSeek ➔ OpenRouter ➔ Custom"}:::config
+        DETECT{"Auto-Detect Provider Priority<br/>Gemini → OpenAI → Claude → Groq → DeepSeek → OpenRouter → Custom"}:::config
         KEYS_CHECK{"Any LLM Key Configured?<br/>(Secrets or Env)"}:::safety
         SETUP_NOTICE["Post Interactive Missing Key Setup Guide<br/>(1-Minute Setup Banner + Free Key Links)"]:::output
     end
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
-        DIFF["Extract Clean Hunk-Bounded PR Diff (main)"]:::config
-        NPM["Live NPM Registry Check (registry.npmjs.org)<br/>Verifies Node 24, Zod 4, TS 7 releases"]:::grounding
+        DIFF["Extract PR Diff (GitHub API / git diff)"]:::config
+        PRIORITY["Smart Diff Prioritizer<br/>P0=auth/API/DB first | P1=standard | P2=assets/locks skip"]:::newfeature
+        REGISTRY["Multi-Ecosystem Registry Grounding<br/>NPM + PyPI + Crates.io + Go module proxy"]:::grounding
         SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
+        OWASP["OWASP Top 10 + CWE Taxonomy Injection<br/>Forces CWE-ID & OWASP category on security findings"]:::newfeature
         PROMPT["Assemble Grounded Prompt + System Guardrails<br/>(Provider Format: XML/Schema/Markdown + Language)"]:::grounding
         RETRY["fetchWithRetry (Backoff + Jitter)"]:::llm
         CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
         FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
-        CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3–4 Built-In Models)"]:::llm
+        CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3-4 Built-In Models)"]:::llm
         DIAGNOSTIC_NOTICE["Post Diagnostic Failure Notice<br/>(Links to Actions Run Logs)"]:::safety
         ZOD["Zod 4.6.5 Validation & Line Number Coercion<br/>(InlineSuggestionsListSchema)"]:::zod
     end
 
-    subgraph GATES["4. Multi-Channel Outputs & Merge Gates"]
-        COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click '[ Apply suggestion ]' In Diff"]:::output
-        CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
-        PR_DESC["Auto-Update PR Description<br/>Prepends 🟢/🟡/🔴 Risk Badge & Summary"]:::output
+    subgraph POSTPROC["4. Post-Processing & Enrichment"]
+        TEST_CHECK["Missing Test Coverage Detector<br/>Flags uncovered exports + suggests stubs (TS/JS/Py/Go)"]:::newfeature
+        COST_FOOTER["Token & Cost Transparency Footer<br/>Model | Est. Tokens | Est. USD Cost | Latency"]:::newfeature
     end
 
-    subgraph SUMMARY_FLOW["5. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
+    subgraph GATES["5. Multi-Channel Outputs & Merge Gates"]
+        COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click 'Apply suggestion' In Diff"]:::output
+        CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
+        PR_DESC["Auto-Update PR Description<br/>Prepends Risk Badge & Walkthrough Table"]:::output
+    end
+
+    subgraph SUMMARY_FLOW["6. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
         CI_CHECK{"Any CI Data or Jobs Detected?<br/>hasCiData()"}:::summary
         SKIP_CI["Smart Auto-Skip Empty CI Table<br/>(Keeps PR Comments Clean)"]:::safety
         JOB_API["Dynamic Job Auto-Discovery<br/>(Query GitHub API: /actions/runs/{run_id}/jobs)"]:::summary
@@ -493,8 +524,10 @@ flowchart TD
         CREATE["POST New Sticky Comment"]:::output
     end
 
-    %% Flow Routing
+    %% Trigger routing
     PR --> BOT
+    COMMENT_EVT --> PARSE_CMD
+    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX & CMD_REVIEW
     BOT -- "Yes" --> SKIP
     BOT -- "No" --> PARSE
     PARSE --> RULES
@@ -502,9 +535,11 @@ flowchart TD
     DETECT --> KEYS_CHECK
     KEYS_CHECK -- "No Keys" --> SETUP_NOTICE
     KEYS_CHECK -- "Keys Found" --> DIFF
-    DIFF --> NPM
-    NPM --> SEARCH
-    SEARCH --> PROMPT
+    DIFF --> PRIORITY
+    PRIORITY --> REGISTRY
+    REGISTRY --> SEARCH
+    SEARCH --> OWASP
+    OWASP --> PROMPT
     PROMPT --> CALL_PRIMARY
     CALL_PRIMARY --> RETRY
     RETRY --> FALLBACK_CHECK
@@ -512,11 +547,11 @@ flowchart TD
     FALLBACK_CHECK -- "Success" --> ZOD
     CALL_FALLBACK -- "All Failed" --> DIAGNOSTIC_NOTICE
     CALL_FALLBACK -- "Fallback Succeeded" --> ZOD
-    ZOD --> COMMENT_INLINE
-    ZOD --> CHECK_RUN
-    ZOD --> PR_DESC
+    ZOD --> TEST_CHECK
+    TEST_CHECK --> COST_FOOTER
+    COST_FOOTER --> COMMENT_INLINE & CHECK_RUN & PR_DESC
 
-    %% CI Summary Flow Trigger
+    %% CI Summary Flow
     DETECT -. "mode: summary or all" .-> CI_CHECK
     CI_CHECK -- "No CI Data" --> SKIP_CI
     CI_CHECK -- "Jobs / Stages Present" --> JOB_API
@@ -832,13 +867,18 @@ Never guess why an AI review didn't trigger:
 | **Provider Freedom** | ✅ **7 Providers + Custom** | ❌ Proprietary Cloud | ❌ Proprietary Cloud | ✅ BYOK (LiteLLM) | ❌ OpenAI Only |
 | **Local / Private LLMs** | ✅ Ollama, vLLM, Together | ❌ No | ❌ No | ✅ Supported | ❌ No |
 | **1-Click Diff Suggestions** | ✅ Native GitHub | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Live NPM Grounding** | ✅ **Unique** (`registry.npmjs.org`) | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Interactive Slash Commands** | ✅ **`@explain`/`@fix`/`/review`** | ✅ Yes | ⚠️ Limited | ✅ Yes | ❌ No |
+| **Multi-Ecosystem Grounding** | ✅ **NPM + PyPI + Crates + Go** | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Google Search Grounding** | ✅ Gemini Live Grounding | ❌ No | ❌ No | ❌ No | ❌ No |
+| **OWASP / CWE Taxonomy** | ✅ **Auto-tagged findings** | ⚠️ Generic text | ⚠️ Generic text | ⚠️ Generic text | ⚠️ Generic text |
+| **Smart Diff Priority (P0/P1/P2)** | ✅ **Auth/API/DB always first** | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Missing Test Detection** | ✅ **Stubs for TS/JS/Py/Go** | ✅ Yes | ✅ Yes | ⚠️ Limited | ❌ No |
+| **Cost Transparency Footer** | ✅ **Tokens + USD + Latency** | ❌ Hidden | ❌ Hidden | ❌ Hidden | ❌ Hidden |
 | **CI Duration Metrics** | ✅ **Unique** (GitHub Jobs API) | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Sticky Summary (No Spam)** | ✅ In-place `PATCH` | ✅ Yes | ✅ Yes | ⚠️ Variable | ✅ Yes |
 | **Repository Rules File** | ✅ `.reviewground.yml` | ✅ `.coderabbit.yaml` | ✅ `.qodo.toml` | ✅ `.pr_agent.toml` | ❌ No |
 | **GitHub Check Run Gate** | ✅ Native (Pass/Fail) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **PR Description Risk Badge** | ✅ 🟢/🟡/🔴 Auto-badge | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta |
+| **PR Description Risk Badge** | ✅ 🟢/🟡/🔴 + Walkthrough | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta |
 | **Multi-Language Output** | ✅ BCP-47 (`ja`, `es`, `zh`...) | ⚠️ Limited | ⚠️ Limited | ✅ Supported | ⚠️ Limited |
 | **Open Source License** | ✅ **AGPL-3.0** | ❌ Proprietary | ❌ Proprietary | ✅ Apache-2.0 | ❌ Proprietary |
 | **Runtime Architecture** | ✅ Zero-dependency (<2MB) | ❌ Hosted SaaS Proxy | ❌ Hosted SaaS Proxy | ⚠️ Python CLI / App | ❌ Hosted SaaS |
