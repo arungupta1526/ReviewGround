@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0](https://github.com/arungupta1526/ReviewGround/compare/v1.2.0...v1.3.0) (2026-10-10)
+
+
+### Features
+
+* **v1.3.0:** complete 7-feature competitive suite (slash commands, walkthrough describer, multi-registry, cost footer, smart diff, OWASP, test stubs) ([1130da4](https://github.com/arungupta1526/ReviewGround/commit/1130da496ebf7e70cae5965b4baf815d5d21b82d))
+
 ## [1.2.0](https://github.com/arungupta1526/ReviewGround/compare/v1.1.0...v1.2.0) - 2026-10-10
 
 ### Features & Maintenance
