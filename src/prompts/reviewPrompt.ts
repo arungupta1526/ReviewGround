@@ -13,28 +13,53 @@ export interface PromptConfig {
   provider?: string;
   model?: string;
   packageGroundTruthNote?: string;
+  repoContext?: string;
   truncatedDiff: string;
 }
 
+const ANTI_NITPICK_RULE =
+  '\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.';
+
+const SEVERITY_BADGES_INSTRUCTION =
+  '\nSEVERITY RATING FORMAT: Prefix each finding with one of these standardized severity badges:\n- 🚨 **[BLOCKER]**: High/critical security vulnerabilities, data loss, crashes, or severe regressions.\n- ⚠️ **[WARNING]**: Performance bottlenecks, resource leaks, edge-case bugs, or unhandled errors.\n- 💡 **[SUGGESTION]**: Architectural enhancements or missing test coverage stubs (comprehensive mode only).\nDo NOT report low-value style opinions or manufacture non-existent issues.';
+
 const REVIEW_FOCUS_MAP: Record<string, string> = {
   critical:
-    '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements.',
+    '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements.' +
+    ANTI_NITPICK_RULE,
   standard:
-    '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks.',
+    '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks.' +
+    ANTI_NITPICK_RULE,
   comprehensive:
-    '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Code style, readability, naming conventions, and documentation gaps.\n5. Test coverage gaps and missing edge-case test scenarios.\n6. Direct, actionable code fixes with concise diff blocks.',
+    '1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Code architecture, readability, naming conventions, and documentation gaps.\n5. Test coverage gaps and missing edge-case test scenarios.\n6. Direct, actionable code fixes with concise diff blocks.',
 };
 
+const GUIDELINE_CANDIDATES = [
+  '.reviewground.yml',
+  '.reviewground.yaml',
+  '.github/reviewground.yml',
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.cursorrules',
+  '.cursor/rules',
+  '.github/copilot-instructions.md',
+  'CONTRIBUTING.md',
+];
+
 /**
- * Discovers and loads custom guidelines from .reviewground.yml or .github/reviewground.yml
+ * Discovers and loads custom guidelines from .reviewground.yml, AGENTS.md,
+ * CLAUDE.md, .cursorrules, or CONTRIBUTING.md, capped at 4,000 characters.
  */
-export function loadCustomGuidelines(): string {
-  for (const filename of ['.reviewground.yml', '.reviewground.yaml', '.github/reviewground.yml']) {
+export function loadCustomGuidelines(maxChars = 4000): string {
+  for (const filename of GUIDELINE_CANDIDATES) {
     if (fs.existsSync(filename)) {
       try {
-        const content = fs.readFileSync(filename, 'utf-8').trim();
-        if (content) {
-          console.log(`📋 Loaded custom review guidelines from ${filename}`);
+        const raw = fs.readFileSync(filename, 'utf-8').trim();
+        if (raw) {
+          const content = raw.length > maxChars
+            ? raw.slice(0, maxChars) + '\n... [guidelines truncated to token ceiling] ...'
+            : raw;
+          console.log(`📋 Loaded custom review guidelines from ${filename} (${content.length} chars)`);
           return `\nRepository Custom Rules & Guidelines (${filename}):\n${content}\n`;
         }
       } catch {
@@ -66,8 +91,10 @@ export function buildReviewPrompt(config: PromptConfig): string {
       : '';
 
   const packageGroundTruthNote = config.packageGroundTruthNote || '';
+  const repoContext = config.repoContext || '';
   const activeProviderName = (config.provider || '').toLowerCase();
   const modelName = (config.model || '').toLowerCase();
+  const contextInstructions = `${packageGroundTruthNote}${customGuidelines}${repoContext}${SEVERITY_BADGES_INSTRUCTION}${owaspInstruction}${languageInstruction}`;
 
   if (activeProviderName === 'anthropic' || modelName.startsWith('claude')) {
     // Claude: Prefers XML-structured tags for diff and instructions
@@ -75,7 +102,7 @@ export function buildReviewPrompt(config: PromptConfig): string {
 You are a Principal Software Engineer &amp; DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions:
@@ -98,7 +125,7 @@ Task: Analyze the git diff below and produce a structured code review.
 
 Review focus:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 Response format:
 - Start with a brief executive summary (1-2 sentences).
 - Use markdown sections (## Bugs, ## Security, ## Performance, etc.) as appropriate for this review level.
@@ -130,7 +157,7 @@ Analyze the following git diff.
 
 ## Review Focus
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 ## Instructions
 - If the code is clean, say: "✅ All changes look clean, performant, and secure!" followed by 2 bullet points.
 - Otherwise, list findings grouped under ### headers (Bugs, Security, Performance, etc.).
@@ -152,7 +179,7 @@ ${config.truncatedDiff}
   return `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
+${contextInstructions}
 If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
