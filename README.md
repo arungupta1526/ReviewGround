@@ -483,6 +483,12 @@ flowchart TD
         CMD_REVIEW["On-Demand Focused Re-Review<br/>full | security | performance | standard"]:::newfeature
     end
 
+    subgraph DESCRIBE["1c. PR Description & Walkthrough (mode: describe)"]
+        DIFF_DESC["Extract PR Diff for Walkthrough"]:::config
+        GEN_WALKTHROUGH["AI Generates Walkthrough Table, Summary,<br/>Key Changes, Testing Checklist & Risk Badge"]:::newfeature
+        MERGE_BODY["Smart Body Merge<br/>Preserves Author Notes & Updates PR Body"]:::output
+    end
+
     subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
         RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
@@ -514,7 +520,7 @@ flowchart TD
     subgraph GATES["5. Multi-Channel Outputs & Merge Gates"]
         COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click 'Apply suggestion' In Diff"]:::output
         CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
-        PR_DESC["Auto-Update PR Description<br/>Prepends Risk Badge & Walkthrough Table"]:::output
+        PR_DESC["Auto-Update PR Description<br/>Injects Walkthrough Table & Risk Badge"]:::output
     end
 
     subgraph SUMMARY_FLOW["6. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
@@ -535,6 +541,9 @@ flowchart TD
     BOT -- "No" --> PARSE
     PARSE --> RULES
     RULES --> DETECT
+    DETECT -- "mode: describe" --> DIFF_DESC
+    DIFF_DESC --> GEN_WALKTHROUGH
+    GEN_WALKTHROUGH --> MERGE_BODY
     DETECT --> KEYS_CHECK
     KEYS_CHECK -- "No Keys" --> SETUP_NOTICE
     KEYS_CHECK -- "Keys Found" --> DIFF
@@ -552,7 +561,9 @@ flowchart TD
     CALL_FALLBACK -- "Fallback Succeeded" --> ZOD
     ZOD --> TEST_CHECK
     TEST_CHECK --> COST_FOOTER
-    COST_FOOTER --> COMMENT_INLINE & CHECK_RUN & PR_DESC
+    COST_FOOTER --> COMMENT_INLINE & CHECK_RUN
+    COST_FOOTER -. "generate-pr-description: true" .-> PR_DESC
+    PR_DESC --> MERGE_BODY
 
     %% CI Summary Flow
     DETECT -. "mode: summary or all" .-> CI_CHECK
