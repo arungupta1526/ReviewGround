@@ -8,6 +8,8 @@ import * as core from '@actions/core';
 import * as fs from 'fs';
 import { runReview, ReviewerConfig } from './reviewer.js';
 import { runSummary, SummaryConfig } from './summary.js';
+import { handleSlashCommand, SlashCommandConfig } from './slashCommands.js';
+import { runPrDescribe, PrDescribeConfig } from './prDescriber.js';
 
 function getOptionalInput(name: string, envFallbacks?: string[] | string): string {
   const val = core.getInput(name);
@@ -69,6 +71,115 @@ async function run(): Promise<void> {
     console.log(`- PR Number: ${prNumber || 'N/A (Push or non-PR context)'}`);
     console.log(`- Execution Mode: ${mode}`);
 
+    // ── Feature 1: Slash Command / issue_comment handler ────────────────────
+    if (mode === 'slash-command' || mode === 'comment') {
+      const eventPath = process.env.GITHUB_EVENT_PATH;
+      let commentBody = '';
+      let commentId: number | undefined;
+      let commentAuthor: string | undefined;
+
+      if (eventPath && fs.existsSync(eventPath)) {
+        try {
+          const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+          commentBody = eventData.comment?.body || '';
+          commentId = eventData.comment?.id;
+          commentAuthor = eventData.comment?.user?.login;
+
+          // Security Check (CWE-284 / OWASP A01:2021 Broken Access Control):
+          // Restrict slash command execution to repository collaborators, members, contributors, or owners
+          // to prevent untrusted external actors from exhausting LLM API token quotas (Denial of Wallet).
+          const authorAssociation = eventData.comment?.author_association;
+          if (commentAuthor && authorAssociation && ['NONE', 'FIRST_TIME_CONTRIBUTOR'].includes(authorAssociation)) {
+            console.warn(
+              `⚠️ [Security] Unauthorized slash command attempt by external contributor '${commentAuthor}' (author_association: ${authorAssociation}). Skipping.`
+            );
+            return;
+          }
+        } catch {
+          console.warn('⚠️ Could not parse GitHub event payload for slash command.');
+        }
+      }
+
+      if (!commentBody.trim()) {
+        console.log('ℹ️  Slash command mode: no comment body found in event payload. Skipping.');
+        return;
+      }
+
+      const slashConfig: SlashCommandConfig = {
+        githubToken: token,
+        repo,
+        prNumber,
+        commentBody,
+        commentId,
+        commentAuthor,
+        commentTag: getOptionalInput('comment-tag', ['REVIEWGROUND_COMMENT_TAG', 'COMMENT_TAG']) || undefined,
+        provider: getOptionalInput('provider', ['REVIEWGROUND_PROVIDER', 'PROVIDER', 'LLM_PROVIDER']) || undefined,
+        model: getOptionalInput('model', ['REVIEWGROUND_MODEL', 'MODEL', 'LLM_MODEL']) || undefined,
+        geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
+        openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY', 'OPENAI_KEY']) || undefined,
+        anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY']) || undefined,
+        groqApiKey: getOptionalInput('groq-api-key', ['GROQ_API_KEY', 'GROQ_KEY']) || undefined,
+        deepseekApiKey: getOptionalInput('deepseek-api-key', ['DEEPSEEK_API_KEY', 'DEEPSEEK_KEY']) || undefined,
+        openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY', 'OPENROUTER_KEY']) || undefined,
+        llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL', 'OLLAMA_BASE_URL', 'OLLAMA_HOST']) || undefined,
+        llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY', 'CUSTOM_API_KEY']) || undefined,
+        baseBranch: getOptionalInput('base-branch', ['REVIEWGROUND_BASE_BRANCH', 'BASE_BRANCH']) || 'main',
+        enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
+        fallbackModels: getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+          ? getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
+      };
+
+      console.log('\n--- ⚡ Processing Slash Command ---');
+      await handleSlashCommand(slashConfig);
+      console.log('\n✨ ReviewGround slash command completed.');
+      return;
+    }
+
+    // ── Feature 2: Standalone Mode 'describe' ────────────────────────────────
+    if (mode === 'describe') {
+      const describeConfig: PrDescribeConfig = {
+        githubToken: token,
+        repo,
+        prNumber,
+        baseBranch: getOptionalInput('base-branch', ['REVIEWGROUND_BASE_BRANCH', 'BASE_BRANCH']) || 'main',
+        provider: getOptionalInput('provider', ['REVIEWGROUND_PROVIDER', 'PROVIDER', 'LLM_PROVIDER']) || undefined,
+        model: getOptionalInput('model', ['REVIEWGROUND_MODEL', 'MODEL', 'LLM_MODEL']) || undefined,
+        temperature: (() => {
+          const t = getOptionalInput('temperature', ['REVIEWGROUND_TEMPERATURE', 'LLM_TEMPERATURE']);
+          return t ? parseFloat(t) : undefined;
+        })(),
+        maxTokens: (() => {
+          const m = getOptionalInput('max-tokens', ['REVIEWGROUND_MAX_TOKENS', 'LLM_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : undefined;
+        })(),
+        geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
+        openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY', 'OPENAI_KEY']) || undefined,
+        anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY']) || undefined,
+        groqApiKey: getOptionalInput('groq-api-key', ['GROQ_API_KEY', 'GROQ_KEY']) || undefined,
+        deepseekApiKey: getOptionalInput('deepseek-api-key', ['DEEPSEEK_API_KEY', 'DEEPSEEK_KEY']) || undefined,
+        openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY', 'OPENROUTER_KEY']) || undefined,
+        llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL', 'OLLAMA_BASE_URL', 'OLLAMA_HOST']) || undefined,
+        llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY', 'CUSTOM_API_KEY']) || undefined,
+        enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
+        fallbackModels: getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+          ? getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
+      };
+
+      console.log('\n--- 📝 Generating PR Description & Walkthrough ---');
+      const describeResult = await runPrDescribe(describeConfig);
+      core.setOutput('described', describeResult ? 'true' : 'false');
+      console.log('\n✨ ReviewGround PR description completed.');
+      return;
+    }
+
     const baseConfig = {
       githubToken: token,
       repo,
@@ -100,6 +211,16 @@ async function run(): Promise<void> {
         enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
         enableInlineSuggestions: getBooleanInput('enable-inline-suggestions', ['ENABLE_INLINE_SUGGESTIONS'], true),
         enableNpmVerify: getBooleanInput('enable-npm-verify', ['ENABLE_NPM_VERIFY'], true),
+        // Feature 3: Multi-ecosystem registry grounding
+        enableMultiRegistryVerify: getBooleanInput('enable-multi-registry-verify', ['ENABLE_MULTI_REGISTRY_VERIFY'], true),
+        // Feature 4: Token & cost transparency footer
+        enableCostFooter: getBooleanInput('enable-cost-footer', ['ENABLE_COST_FOOTER'], true),
+        // Feature 5: Smart diff prioritization
+        enableSmartDiffPriority: getBooleanInput('enable-smart-diff-priority', ['ENABLE_SMART_DIFF_PRIORITY'], true),
+        // Feature 6: OWASP/CWE taxonomy tagging
+        enableOwaspTagging: getBooleanInput('enable-owasp-tagging', ['ENABLE_OWASP_TAGGING'], true),
+        // Feature 7: Missing test coverage detection
+        enableTestCoverageCheck: getBooleanInput('enable-test-coverage-check', ['ENABLE_TEST_COVERAGE_CHECK'], true),
         geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
         openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY', 'OPENAI_KEY']) || undefined,
         anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY']) || undefined,
@@ -115,6 +236,9 @@ async function run(): Promise<void> {
               .filter(Boolean)
           : undefined,
         reviewLanguage: getOptionalInput('review-language', ['REVIEWGROUND_REVIEW_LANGUAGE', 'REVIEW_LANGUAGE']) || 'en',
+        generatePrDescription:
+          getBooleanInput('generate-pr-description', ['GENERATE_PR_DESCRIPTION', 'REVIEWGROUND_GENERATE_PR_DESCRIPTION'], false) ||
+          getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
         enablePrDescriptionUpdate: getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
         enableCheckRun: getBooleanInput('enable-check-run', ['ENABLE_CHECK_RUN'], false),
       };

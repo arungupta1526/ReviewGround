@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/**/*.test.ts",
     "lint": "tsc --noEmit",
+    "generate-diagram": "npx -y @mermaid-js/mermaid-cli -i images/architecture-diagram.mmd -o images/architecture-diagram.svg",
     "prepublishOnly": "npm run build"
   },
   "repository": {

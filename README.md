@@ -13,7 +13,7 @@
 [![Security: 0 Vulnerabilities](https://img.shields.io/badge/Security-0%20Vulnerabilities-success.svg)](package.json)
 
 *Stop paying $50/seat/month for proprietary AI code review bots.*  
-**ReviewGround** brings enterprise-grade AI code review, live package registry grounding, 1-click commit suggestions, and sticky CI summaries directly to your repository with your own API keys.
+**ReviewGround** brings enterprise-grade AI code review, multi-ecosystem registry grounding, interactive PR slash commands, OWASP/CWE security taxonomy tagging, 1-click commit suggestions, and sticky CI summaries directly to your repository with your own API keys.
 
 <br/>
 
@@ -36,6 +36,11 @@
   <img src="./images/pr-sticky-patch-history.png" alt="ReviewGround Single Sticky Comment History" width="850" />
 </p>
 
+<p align="center">
+  <b>4. Native 1-Click Code Suggestions on PR Diff (GitHub Files Changed Tab)</b><br/>
+  <img src="./images/pr-1-click-code-suggestion.png" alt="ReviewGround 1-Click Code Suggestion in GitHub PR Diff" width="850" />
+</p>
+
 </details>
 
 ---
@@ -51,8 +56,13 @@
 | **Model Customization** | Fixed models only | **Full Custom Model Override (`model: '...'`)** |
 | **Multi-Host Safety** | Hijacks open models to hardcoded hosts | **Preserves Custom & OpenRouter host selections (Qwen, Llama)** |
 | **Zero-Commit Control** | Must edit YAML & commit for model changes | **Change Provider/Model via GitHub Repo Variables** |
-| **Hallucination Prevention** | None (flags modern packages as non-existent) | **Real-Time NPM Registry Search Grounding** |
+| **Package Hallucinations** | None (flags modern packages as non-existent) | **Multi-Ecosystem Live Registry Grounding (NPM + PyPI + Crates + Go)** |
 | **Commit Suggestions** | Markdown text diff blocks | **Native GitHub 1-Click `[ Apply suggestion ]` Buttons** |
+| **Interactive PR Commands** | Not supported | **`@reviewground explain/fix`, `/review security` Slash Commands** |
+| **Security Taxonomy** | Generic "could be vulnerable" | **OWASP Top 10 + CWE-ID Tagged Findings** |
+| **Large PR Handling** | Truncates randomly | **Priority-Based Diff Packing (P0: Auth/API/DB first)** |
+| **Test Coverage** | Not supported | **Auto-detects uncovered exports + suggests test stubs** |
+| **Cost Transparency** | Hidden / opaque | **Token count & estimated cost footer per review** |
 | **PR Comment Noise** | Spams 5–10 new comments per PR push | **Single In-Place Sticky Comment (Updated via PATCH)** |
 | **CI Duration Tracking** | Not supported | **Workflow Jobs API Duration Metrics (`9s`, `1m 24s`)** |
 | **Local / Air-Gapped AI** | Not supported | **Self-hosted Ollama / Together AI / vLLM compatible** |
@@ -149,11 +159,13 @@ ReviewGround features **Smart Mismatch Auto-Routing**:
 
 ## ⚡ Execution Modes (`mode`)
 
-ReviewGround operates in three execution modes configured via the `mode` input (`mode: review | summary | all`):
+ReviewGround operates in five execution modes configured via the `mode` input (`mode: review | summary | all | describe | slash-command`):
 
 | Mode | Intended Use | Behavior |
 |---|---|---|
-| **`mode: review`** *(Recommended for Code Review)* | **AI Code Review Only** | Runs universal multi-provider AI review, live npm package registry grounding, and 1-click interactive diff suggestions. **Post-CI verification table is completely suppressed.** |
+| **`mode: review`** *(Recommended for Code Review)* | **AI Code Review Only** | Runs universal multi-provider AI review, live multi-registry grounding, smart diff prioritization, OWASP tagging, and 1-click interactive diff suggestions. **Post-CI verification table is completely suppressed.** |
+| **`mode: describe`** | **PR Description & Walkthrough** | Analyzes the diff to auto-generate a comprehensive PR summary, key changes bullets, an interactive file walkthrough table, and testing checklist directly into the PR body. |
+| **`mode: slash-command`** | **Interactive PR Chat** | Handles `issue_comment` triggers for commands like `@reviewground explain`, `@reviewground fix`, and `/review full/security`. |
 | **`mode: summary`** | **Post-CI Verification Only** | Queries GitHub Actions Workflow Jobs API to render duration metrics (`14s`, `1m 20s`) and status badges for Gitleaks, Dependency Audit, Build, Unit Tests, and custom stages. |
 | **`mode: all`** *(Default)* | **Unified Review & CI Verification** | Runs AI review first, then appends the CI verification summary to the single sticky comment. Features **Smart CI Auto-Skip**: If no CI stages (`gitleaks-result`, `build-result`, etc.) or matching workflow jobs are detected, the CI table is **automatically omitted** to prevent noisy `unknown` status rows. |
 
@@ -384,47 +396,63 @@ jobs:
 
       - uses: arungupta1526/ReviewGround@v1
         with:
-          # --- Core Execution & Git Controls ---
+          # ── Core Execution & Git Controls ────────────────────────────────
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          mode: 'all'                             # 'review' (AI only) | 'summary' (CI table only) | 'all' (both, default: 'all')
-          base-branch: 'main'                     # Target branch for diff calculation (default: 'main')
+          mode: 'all'                             # 'review' | 'summary' | 'all' | 'describe' | 'slash-command'
+          base-branch: 'main'                     # Target branch for diff (default: 'main')
 
-          # --- AI Review Depth & Customization ---
-          review-level: 'standard'               # 'critical' (security/bugs only) | 'standard' (default) | 'comprehensive' (all + style)
-          review-language: 'en'                  # Review language e.g. 'en', 'ja', 'es', 'de', 'zh', 'hi' (default: 'en')
+          # ── AI Review Depth & Customization ──────────────────────────────
+          review-level: 'standard'               # 'critical' | 'standard' (default) | 'comprehensive'
+          review-language: 'en'                  # BCP-47 language code e.g. 'en', 'ja', 'es', 'de', 'zh'
           temperature: '0.2'                     # Sampling temperature 0.0–1.0 (default: '0.2')
-          max-tokens: '2048'                     # Maximum response token length (default: '2048')
-          ignore-patterns: ''                    # Comma-separated globs to exclude e.g. 'dist/**,*.min.js' (default: none)
+          max-tokens: '2048'                     # Max response token length (default: '2048')
+          ignore-patterns: ''                    # Comma-separated globs e.g. 'dist/**,*.min.js'
 
-          # --- Grounding & Suggestions (Auto-Enabled by Default) ---
-          enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons (default: 'true')
-          enable-search-grounding: 'true'        # Google Search tool grounding for Gemini (default: 'true')
-          enable-npm-verify: 'true'              # Live registry.npmjs.org check to eliminate fake versions (default: 'true')
+          # ── Grounding & Inline Suggestions (on by default) ───────────────
+          enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons
+          enable-search-grounding: 'true'        # Google Search tool grounding for Gemini
+          enable-npm-verify: 'true'              # Live registry.npmjs.org anti-hallucination check
 
-          # --- Enterprise Merge Gates & Badges (Opt-In) ---
-          enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & summary to PR body (default: 'false')
-          enable-check-run: 'false'              # Create blocking pass/fail GitHub Check Run gate (default: 'false')
+          # ── v1.3.0: Multi-Ecosystem Registry Grounding ───────────────────
+          enable-multi-registry-verify: 'true'  # Also verify PyPI, Crates.io & Go module proxy (default: 'true')
 
-          # --- Multi-Provider Overrides (Optional) ---
-          provider: ''                           # Force specific provider: 'gemini' | 'groq' | 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'custom'
-          model: ''                              # Force specific model override e.g. 'deepseek-chat', 'gpt-4o'
-          fallback-models: ''                    # Custom comma-separated failover models (default: built-in chain)
+          # ── v1.3.0: Token & Cost Transparency Footer ─────────────────────
+          enable-cost-footer: 'true'             # Show est. tokens + cost + latency in sticky comment (default: 'true')
 
-          # --- Post-CI Status Verification (Optional Stage Inputs) ---
-          gitleaks-result: ''                    # e.g. ${{ needs.gitleaks.result }} (auto-discovered via API if omitted)
-          audit-result: ''                       # e.g. ${{ needs.security-audit.result }} (auto-discovered via API if omitted)
-          build-result: ''                       # e.g. ${{ needs.build.result }} (auto-discovered via API if omitted)
-          test-result: ''                        # e.g. ${{ needs.test.result }} (auto-discovered via API if omitted)
-          extra-stages: ''                       # Extra JSON stages e.g. '[{"name":"Deploy","result":"success"}]'
+          # ── v1.3.0: Smart Diff Priority Scoring for Large PRs ────────────
+          enable-smart-diff-priority: 'true'     # P0=auth/API/DB first, P2=assets/locks skipped (default: 'true')
+
+          # ── v1.3.0: OWASP Top 10 & CWE Taxonomy Tagging ─────────────────
+          enable-owasp-tagging: 'true'           # Tag security findings with CWE-ID & OWASP category (default: 'true')
+
+          # ── v1.3.0: Missing Unit Test Detection & Stubs ──────────────────
+          enable-test-coverage-check: 'true'     # Warn on new exports lacking tests + suggest stubs (default: 'true')
+
+          # ── v1.3.0: Automated PR Description & Walkthrough (Opt-In) ───────
+          generate-pr-description: 'false'       # Auto-generate PR summary, walkthrough table & checklist
+          enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & walkthrough table to PR body
+          enable-check-run: 'false'              # Create blocking pass/fail GitHub Check Run gate
+
+          # ── Multi-Provider Overrides (Optional) ──────────────────────────
+          provider: ''                           # Force: 'gemini' | 'groq' | 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'custom'
+          model: ''                              # Force model override e.g. 'deepseek-chat', 'gpt-4o'
+          fallback-models: ''                    # Custom comma-separated failover models
+
+          # ── Post-CI Status Verification (Optional Stage Inputs) ───────────
+          gitleaks-result: ''                    # e.g. ${{ needs.gitleaks.result }}
+          audit-result: ''                       # e.g. ${{ needs.security-audit.result }}
+          build-result: ''                       # e.g. ${{ needs.build.result }}
+          test-result: ''                        # e.g. ${{ needs.test.result }}
+          extra-stages: ''                       # e.g. '[{"name":"Deploy","result":"success"}]'
         env:
-          # --- BYOK Provider API Keys (Set any one or multiple in GitHub Secrets) ---
+          # ── BYOK Provider API Keys (set any one or multiple in GitHub Secrets) ──
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}         # For self-hosted endpoints (e.g. Ollama/vLLM)
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}         # Self-hosted endpoint (e.g. Ollama/vLLM)
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}           # API key for custom endpoint
 ```
 
@@ -435,7 +463,7 @@ jobs:
 
 ```mermaid
 flowchart TD
-    %% Custom Themed Color Palettes
+    %% Color Palettes
     classDef trigger fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
     classDef config fill:#181825,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
     classDef safety fill:#313244,stroke:#f9e2af,stroke-width:2px,color:#f9e2af;
@@ -444,41 +472,64 @@ flowchart TD
     classDef zod fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe;
     classDef output fill:#11261f,stroke:#a6e3a1,stroke-width:2px,color:#a6e3a1;
     classDef summary fill:#261828,stroke:#fab387,stroke-width:2px,color:#fab387;
+    classDef newfeature fill:#1f1a00,stroke:#f9e2af,stroke-width:2px,color:#f9e2af;
 
     subgraph TRIGGER["1. GitHub Event & Context Resolution"]
         PR["PR Event: opened / synchronize / reopened"]:::trigger
+        COMMENT_EVT["issue_comment Event<br/>@reviewground / /review commands"]:::trigger
         BOT{"Is PR from Automated Bot?<br/>(e.g. dependabot[bot])"}:::safety
         SKIP["Graceful Skip (Preserves CI Build Green)"]:::safety
+    end
+
+    subgraph SLASH["1b. Slash Command Handler (mode: slash-command)"]
+        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain, fix / /review on-demand"]:::newfeature
+        CMD_EXPLAIN["AI Explains Flagged Issues<br/>with Educational Context"]:::newfeature
+        CMD_FIX["AI Generates Concrete Code Patch"]:::newfeature
+        CMD_REVIEW["On-Demand Focused Re-Review<br/>full, security, performance, standard"]:::newfeature
+    end
+
+    subgraph DESCRIBE["1c. PR Description & Walkthrough (mode: describe)"]
+        DIFF_DESC["Extract PR Diff for Walkthrough"]:::config
+        GEN_WALKTHROUGH["AI Generates Walkthrough Table, Summary,<br/>Key Changes, Testing Checklist & Risk Badge"]:::newfeature
+        MERGE_BODY["Smart Body Merge<br/>Preserves Author Notes & Updates PR Body"]:::output
     end
 
     subgraph CONFIG["2. Dynamic Config & Context Ingestion"]
         PARSE["Parse Inputs & Repository Variables<br/>(vars.PROVIDER, vars.MODEL, vars.FALLBACK_MODELS)"]:::config
         RULES["Load Custom Repo Guidelines<br/>(.reviewground.yml)"]:::config
-        DETECT{"Auto-Detect Provider Priority<br/>Gemini ➔ OpenAI ➔ Claude ➔ Groq ➔ DeepSeek ➔ OpenRouter ➔ Custom"}:::config
+        DETECT{"Auto-Detect Provider Priority<br/>Gemini → OpenAI → Claude → Groq → DeepSeek → OpenRouter → Custom"}:::config
         KEYS_CHECK{"Any LLM Key Configured?<br/>(Secrets or Env)"}:::safety
         SETUP_NOTICE["Post Interactive Missing Key Setup Guide<br/>(1-Minute Setup Banner + Free Key Links)"]:::output
     end
 
     subgraph ENGINE["3. Grounding & Multi-Provider AI Review Engine"]
-        DIFF["Extract Clean Hunk-Bounded PR Diff (main)"]:::config
-        NPM["Live NPM Registry Check (registry.npmjs.org)<br/>Verifies Node 24, Zod 4, TS 7 releases"]:::grounding
+        DIFF["Extract PR Diff (GitHub API / git diff)"]:::config
+        PRIORITY["Smart Diff Prioritizer<br/>P0=auth/API/DB first, P1=standard, P2=assets/locks skip"]:::newfeature
+        REGISTRY["Multi-Ecosystem Registry Grounding<br/>NPM + PyPI + Crates.io + Go module proxy"]:::grounding
         SEARCH["Google Search Tool Grounding (Gemini)<br/>Live Web Context Injection"]:::grounding
+        OWASP["OWASP Top 10 + CWE Taxonomy Injection<br/>Forces CWE-ID & OWASP category on security findings"]:::newfeature
         PROMPT["Assemble Grounded Prompt + System Guardrails<br/>(Provider Format: XML/Schema/Markdown + Language)"]:::grounding
         RETRY["fetchWithRetry (Backoff + Jitter)"]:::llm
         CALL_PRIMARY["Call Primary Model<br/>(e.g. gemini-3.5-flash-lite / qwen3.8-27b)"]:::llm
         FALLBACK_CHECK{"Primary Succeeded or HTTP 429 / Quota Error?"}:::llm
-        CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3–4 Built-In Models)"]:::llm
+        CALL_FALLBACK["Sequential Fallback Chain<br/>(Custom FALLBACK_MODELS or 3-4 Built-In Models)"]:::llm
         DIAGNOSTIC_NOTICE["Post Diagnostic Failure Notice<br/>(Links to Actions Run Logs)"]:::safety
         ZOD["Zod 4.6.5 Validation & Line Number Coercion<br/>(InlineSuggestionsListSchema)"]:::zod
     end
 
-    subgraph GATES["4. Multi-Channel Outputs & Merge Gates"]
-        COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click '[ Apply suggestion ]' In Diff"]:::output
-        CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
-        PR_DESC["Auto-Update PR Description<br/>Prepends 🟢/🟡/🔴 Risk Badge & Summary"]:::output
+    subgraph POSTPROC["4. Post-Processing & Enrichment"]
+        TEST_CHECK["Missing Test Coverage Detector<br/>Flags uncovered exports + suggests stubs (TS/JS/Py/Go)"]:::newfeature
+        COST_FOOTER["Token & Cost Transparency Footer<br/>Model • Est. Tokens • Est. USD Cost • Latency"]:::newfeature
     end
 
-    subgraph SUMMARY_FLOW["5. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
+    subgraph GATES["5. Multi-Channel Outputs & Merge Gates"]
+        COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click 'Apply suggestion' In Diff"]:::output
+        CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
+        PR_DESC["Auto-Update PR Description<br/>Injects Walkthrough Table & Risk Badge"]:::output
+        COMMENT_REPLY["PR Comment Reply API<br/>Direct Conversational Response"]:::output
+    end
+
+    subgraph SUMMARY_FLOW["6. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
         CI_CHECK{"Any CI Data or Jobs Detected?<br/>hasCiData()"}:::summary
         SKIP_CI["Smart Auto-Skip Empty CI Table<br/>(Keeps PR Comments Clean)"]:::safety
         JOB_API["Dynamic Job Auto-Discovery<br/>(Query GitHub API: /actions/runs/{run_id}/jobs)"]:::summary
@@ -488,18 +539,28 @@ flowchart TD
         CREATE["POST New Sticky Comment"]:::output
     end
 
-    %% Flow Routing
+    %% Trigger routing
     PR --> BOT
+    COMMENT_EVT --> PARSE_CMD
+    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX
+    PARSE_CMD --> CMD_REVIEW
+    CMD_EXPLAIN & CMD_FIX --> COMMENT_REPLY
+    CMD_REVIEW --> STICKY_FIND
     BOT -- "Yes" --> SKIP
     BOT -- "No" --> PARSE
     PARSE --> RULES
     RULES --> DETECT
+    DETECT -- "mode: describe" --> DIFF_DESC
+    DIFF_DESC --> GEN_WALKTHROUGH
+    GEN_WALKTHROUGH --> MERGE_BODY
     DETECT --> KEYS_CHECK
     KEYS_CHECK -- "No Keys" --> SETUP_NOTICE
     KEYS_CHECK -- "Keys Found" --> DIFF
-    DIFF --> NPM
-    NPM --> SEARCH
-    SEARCH --> PROMPT
+    DIFF --> PRIORITY
+    PRIORITY --> REGISTRY
+    REGISTRY --> SEARCH
+    SEARCH --> OWASP
+    OWASP --> PROMPT
     PROMPT --> CALL_PRIMARY
     CALL_PRIMARY --> RETRY
     RETRY --> FALLBACK_CHECK
@@ -507,11 +568,14 @@ flowchart TD
     FALLBACK_CHECK -- "Success" --> ZOD
     CALL_FALLBACK -- "All Failed" --> DIAGNOSTIC_NOTICE
     CALL_FALLBACK -- "Fallback Succeeded" --> ZOD
-    ZOD --> COMMENT_INLINE
-    ZOD --> CHECK_RUN
-    ZOD --> PR_DESC
+    ZOD --> TEST_CHECK
+    TEST_CHECK --> COST_FOOTER
+    COST_FOOTER --> STICKY_FIND
+    COST_FOOTER --> COMMENT_INLINE & CHECK_RUN
+    COST_FOOTER -. "generate-pr-description: true" .-> PR_DESC
+    PR_DESC --> MERGE_BODY
 
-    %% CI Summary Flow Trigger
+    %% CI Summary Flow
     DETECT -. "mode: summary or all" .-> CI_CHECK
     CI_CHECK -- "No CI Data" --> SKIP_CI
     CI_CHECK -- "Jobs / Stages Present" --> JOB_API
@@ -542,6 +606,11 @@ Developers can apply fixes with native GitHub buttons directly in the **Files ch
 │  [ Apply suggestion ]   [ Add suggestion to batch ]    │
 └────────────────────────────────────────────────────────┘
 ```
+
+<p align="center">
+  <img src="./images/pr-1-click-code-suggestion.png" alt="ReviewGround 1-Click Code Suggestion in GitHub PR Diff" width="850" />
+</p>
+
 All line numbers are validated and safely coerced with **Zod 4.6.5** schemas (`InlineSuggestionsListSchema`), preventing runtime crashes when LLMs return string line numbers.
 
 ### 3. 📊 Post-CI Single Sticky PR Summary & Dynamic Job Discovery
@@ -568,7 +637,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | Setting | Action Input (`with:`) | Environment Variable & Secret Aliases (`env:` / `vars.*`) | Default |
 |---|---|---|:---:|
 | **GitHub Token** | `github-token` | `GITHUB_TOKEN`, `GH_TOKEN` | `${{ github.token }}` |
-| **Execution Mode** | `mode` | `REVIEWGROUND_MODE`, `MODE` | `all` (`review` \| `summary` \| `all`) |
+| **Execution Mode** | `mode` | `REVIEWGROUND_MODE`, `MODE` | `all` (`review` \| `summary` \| `all` \| `describe` \| `slash-command`) |
 | **Preferred Provider** | `provider` | `REVIEWGROUND_PROVIDER`, `PROVIDER`, `LLM_PROVIDER` | *Auto-detected* |
 | **Model Override** | `model` | `REVIEWGROUND_MODEL`, `MODEL`, `LLM_MODEL` | *Provider default* |
 | **Fallback Models** | `fallback-models` | `FALLBACK_MODELS`, `<PROVIDER>_FALLBACK_MODELS` | *Built-in 3–4 models* |
@@ -583,16 +652,23 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Search Grounding** | `enable-search-grounding`| `ENABLE_SEARCH_GROUNDING` | `true` |
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |
+| **Multi-Registry Verify** | `enable-multi-registry-verify` | `ENABLE_MULTI_REGISTRY_VERIFY` | `true` — also verifies PyPI, Crates.io & Go module proxy |
+| **Cost Footer** | `enable-cost-footer` | `ENABLE_COST_FOOTER` | `true` — shows token count + estimated cost in sticky comment |
+| **Smart Diff Priority** | `enable-smart-diff-priority` | `ENABLE_SMART_DIFF_PRIORITY` | `true` — P0 (auth/API/DB), P1 (standard), P2 (assets/locks) |
+| **OWASP Tagging** | `enable-owasp-tagging` | `ENABLE_OWASP_TAGGING` | `true` — tags security findings with CWE-ID & OWASP category |
+| **Test Coverage Check** | `enable-test-coverage-check` | `ENABLE_TEST_COVERAGE_CHECK` | `true` — warns when new exports lack unit tests + suggests stubs |
 | **Base Branch** | `base-branch` | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH` | `main` |
 | **LLM Temperature** | `temperature` | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE` | `0.2` |
 | **Max Tokens** | `max-tokens` | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS` | `2048` |
 | **Review Level** | `review-level` | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL` | `standard` (`critical` \| `standard` \| `comprehensive`) |
 | **Ignore Patterns** | `ignore-patterns` | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS` | — (comma-separated globs e.g. `dist/**,*.min.js`) |
 | **Review Language** | `review-language` | `REVIEWGROUND_REVIEW_LANGUAGE`, `REVIEW_LANGUAGE` | `en` (e.g. `ja`, `es`, `de`, `zh`, `pt`, `fr`) |
+| **Generate PR Description** | `generate-pr-description` | `GENERATE_PR_DESCRIPTION`, `REVIEWGROUND_GENERATE_PR_DESCRIPTION` | `false` — auto-generates PR summary, walkthrough table & checklist |
 | **PR Description Update** | `enable-pr-description-update` | `ENABLE_PR_DESCRIPTION_UPDATE` | `false` — auto-appends 🟢/🟡/🔴 risk badge to PR body |
 | **GitHub Check Run** | `enable-check-run` | `ENABLE_CHECK_RUN` | `false` — creates pass/fail Check Run (requires `checks: write`) |
 | **Extra CI Stages** | `extra-stages` | `REVIEWGROUND_EXTRA_STAGES`, `EXTRA_STAGES` | — JSON array e.g. `[{"name":"Deploy","result":"success"}]` |
 | **Comment Tag** | `comment-tag` | `REVIEWGROUND_COMMENT_TAG`, `COMMENT_TAG` | `<!-- reviewground-code-review -->` |
+
 
 ### Action Outputs
 
@@ -600,8 +676,185 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 |---|---|
 | `reviewed` | `"true"` if an AI review was successfully generated |
 | `reviewer-engine` | The provider and model that generated the review (e.g. `Google Gemini (gemini-3.5-flash-lite)`) |
+| `described` | `"true"` if an automated PR description and walkthrough was generated |
 | `summarized` | `"true"` if the CI pipeline summary was rendered |
 | `summary-markdown`| The rendered markdown table of the CI summary and stage durations |
+
+---
+
+## ⚡ v1.3.0 — Competitive Feature Suite
+
+### 💬 Feature 1: Interactive PR Slash Commands (`issue_comment` trigger)
+
+Add a separate workflow step to handle `@reviewground` commands and `/review` slash commands posted by developers in PR comments:
+
+```yaml
+# .github/workflows/reviewground-slash.yml
+name: ReviewGround Slash Commands
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  slash-command:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request != null  # Only handle PR comments
+    steps:
+      - uses: arungupta1526/ReviewGround@v1
+        with:
+          mode: 'slash-command'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}  # or any other provider
+```
+
+**Supported commands** (post in any PR comment):
+
+| Command | Description |
+|---|---|
+| `@reviewground explain` | AI explains why flagged issues were raised, with context |
+| `@reviewground fix` | AI suggests a concrete code patch for detected issues |
+| `/review full` | Triggers a full comprehensive re-review (all levels) |
+| `/review security` | Security-focused re-review (OWASP only) |
+| `/review performance` | Performance-focused re-review |
+| `/review` or `/review standard` | Standard re-review |
+
+---
+
+### 📝 Feature 2: Automated PR Description & Walkthrough Generator (`mode: describe`)
+
+Stop wasting time writing manual PR descriptions. ReviewGround inspects your diff and automatically generates a clean **Summary of Changes**, **Key Changes bullets**, an interactive **Walkthrough Table**, and a **Testing Checklist** directly in your PR body:
+
+```yaml
+# Standalone mode: generate description on PR open or synchronize
+- uses: arungupta1526/ReviewGround@v1
+  with:
+    mode: 'describe'
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+Or enable it alongside your code review:
+
+```yaml
+- uses: arungupta1526/ReviewGround@v1
+  with:
+    generate-pr-description: 'true'
+  env:
+    GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+```
+
+**What it generates in the PR body:**
+
+```markdown
+### 📝 Summary of Changes
+Added JWT token rotation and secure session invalidation to resolve security audit findings.
+
+### 🔑 Key Changes
+- Integrated crypto.randomUUID() for cryptographically secure session IDs.
+- Added expiry validation and automatic refresh token rotation handler.
+
+### 🔍 Changes Walkthrough
+| File | Summary of Changes |
+|---|---|
+| `src/auth/jwt.ts` | Implemented token rotation logic and expiry checks |
+| `src/api/routes.ts` | Added `/auth/refresh` endpoint with rate limiting |
+| `src/db/sessions.ts` | Added session cleanup query on logout |
+
+### 🧪 Testing Checklist
+- [ ] Unit tests added / updated
+- [ ] Manual verification completed
+- [ ] No regressions in core workflows
+
+### 🛡️ Risk Assessment
+- 🟢 **Risk Level: LOW** — Non-breaking security enhancement with 100% test coverage.
+```
+
+> **Author Preservation:** If the PR author already wrote notes or referenced issue numbers (e.g. `Fixes #42`), ReviewGround preserves the author's original text and cleanly appends the AI Walkthrough below!
+
+---
+
+### 🌐 Feature 3: Multi-Ecosystem Registry Grounding
+
+ReviewGround now auto-detects and verifies packages across all major ecosystems:
+
+| Ecosystem | File Detected | Registry API |
+|---|---|---|
+| **JavaScript/Node** | `package.json` | `registry.npmjs.org` |
+| **Python** | `requirements.txt`, `pyproject.toml` | `pypi.org/pypi/{pkg}/json` |
+| **Rust** | `Cargo.toml` | `crates.io/api/v1/crates/{pkg}` |
+| **Go** | `go.mod` | `proxy.golang.org` |
+
+Enable/disable: `enable-multi-registry-verify: 'true'` (default on).
+
+---
+
+### 🪙 Feature 4: Token & Cost Transparency Footer
+
+Every sticky review comment now includes a transparency stat bar at the bottom:
+
+```
+⚡ ReviewGround | Model: `gemini-3.5-flash-lite` | Est. Tokens: 1,840 | Est. Cost: ~$0.0002 | Latency: 1.2s
+Saved ~$20–50/mo vs proprietary AI review bots
+```
+
+Enable/disable: `enable-cost-footer: 'true'` (default on).
+
+---
+
+### 🎯 Feature 5: Smart Diff Prioritization for Large PRs
+
+For PRs >28,000 characters, ReviewGround prioritizes files based on security impact:
+
+| Tier | Files | Behavior |
+|---|---|---|
+| **P0 (Critical)** | `auth/`, `api/`, `db/`, `payments/`, `*.sql`, middleware, config | Always reviewed first |
+| **P1 (Standard)** | Regular application code | Reviewed if budget allows |
+| **P2 (Skip first)** | `package-lock.json`, `*.snap`, `dist/`, SVG/images, vendor | Skipped first when budget tight |
+
+Enable/disable: `enable-smart-diff-priority: 'true'` (default on).
+
+---
+
+### 🏷️ Feature 6: OWASP Top 10 & CWE Taxonomy Tagging
+
+When security issues are flagged, ReviewGround now instructs the AI to include standard vulnerability IDs:
+
+- ❌ **CWE-89: SQL Injection** (OWASP A03:2021 — Injection)
+- ⚠️ **CWE-79: Cross-Site Scripting (XSS)** (OWASP A03:2021)
+- 🔒 **CWE-798: Hardcoded Credentials** (OWASP A07:2021)
+- 🌐 **CWE-918: SSRF** (OWASP A10:2021)
+
+Enable/disable: `enable-owasp-tagging: 'true'` (default on).
+
+---
+
+### 🧪 Feature 7: Missing Unit Test Warning & Auto-Test Stubs
+
+ReviewGround detects new exported functions, classes, and HTTP endpoints added in a PR without corresponding test files being updated:
+
+```
+⚠️ 2 new exported functions detected without corresponding unit tests: `generateToken`, `validateSession`
+
+<details>
+<summary>🧪 Click to view suggested unit test stubs</summary>
+
+```typescript
+// src/auth/jwt.ts → generateToken
+it('generateToken — should work correctly', () => {
+  const result = generateToken();
+  expect(result).toBeDefined();
+});
+```
+
+</details>
+```
+
+Supported languages: **TypeScript, JavaScript, Python, Go**.  
+Enable/disable: `enable-test-coverage-check: 'true'` (default on).
 
 ---
 
@@ -698,13 +951,18 @@ Never guess why an AI review didn't trigger:
 | **Provider Freedom** | ✅ **7 Providers + Custom** | ❌ Proprietary Cloud | ❌ Proprietary Cloud | ✅ BYOK (LiteLLM) | ❌ OpenAI Only |
 | **Local / Private LLMs** | ✅ Ollama, vLLM, Together | ❌ No | ❌ No | ✅ Supported | ❌ No |
 | **1-Click Diff Suggestions** | ✅ Native GitHub | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Live NPM Grounding** | ✅ **Unique** (`registry.npmjs.org`) | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Interactive Slash Commands** | ✅ **`@explain`/`@fix`/`/review`** | ✅ Yes | ⚠️ Limited | ✅ Yes | ❌ No |
+| **Multi-Ecosystem Grounding** | ✅ **NPM + PyPI + Crates + Go** | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Google Search Grounding** | ✅ Gemini Live Grounding | ❌ No | ❌ No | ❌ No | ❌ No |
+| **OWASP / CWE Taxonomy** | ✅ **Auto-tagged findings** | ⚠️ Generic text | ⚠️ Generic text | ⚠️ Generic text | ⚠️ Generic text |
+| **Smart Diff Priority (P0/P1/P2)** | ✅ **Auth/API/DB always first** | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Missing Test Detection** | ✅ **Stubs for TS/JS/Py/Go** | ✅ Yes | ✅ Yes | ⚠️ Limited | ❌ No |
+| **Cost Transparency Footer** | ✅ **Tokens + USD + Latency** | ❌ Hidden | ❌ Hidden | ❌ Hidden | ❌ Hidden |
 | **CI Duration Metrics** | ✅ **Unique** (GitHub Jobs API) | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Sticky Summary (No Spam)** | ✅ In-place `PATCH` | ✅ Yes | ✅ Yes | ⚠️ Variable | ✅ Yes |
 | **Repository Rules File** | ✅ `.reviewground.yml` | ✅ `.coderabbit.yaml` | ✅ `.qodo.toml` | ✅ `.pr_agent.toml` | ❌ No |
 | **GitHub Check Run Gate** | ✅ Native (Pass/Fail) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **PR Description Risk Badge** | ✅ 🟢/🟡/🔴 Auto-badge | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta |
+| **PR Description Risk Badge** | ✅ 🟢/🟡/🔴 + Walkthrough | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta |
 | **Multi-Language Output** | ✅ BCP-47 (`ja`, `es`, `zh`...) | ⚠️ Limited | ⚠️ Limited | ✅ Supported | ⚠️ Limited |
 | **Open Source License** | ✅ **AGPL-3.0** | ❌ Proprietary | ❌ Proprietary | ✅ Apache-2.0 | ❌ Proprietary |
 | **Runtime Architecture** | ✅ Zero-dependency (<2MB) | ❌ Hosted SaaS Proxy | ❌ Hosted SaaS Proxy | ⚠️ Python CLI / App | ❌ Hosted SaaS |
