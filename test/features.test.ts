@@ -250,3 +250,14 @@ index 0000000..1111111 100644
     assert.ok(result.ecosystems.length >= 0, 'ecosystems array should exist');
   });
 });
+
+describe('Architecture Diagram Parity', () => {
+  it('ensures images/architecture-diagram.mmd matches the Mermaid block in README.md', async () => {
+    const fs = await import('fs');
+    const readme = fs.readFileSync('README.md', 'utf-8');
+    const mmd = fs.readFileSync('images/architecture-diagram.mmd', 'utf-8');
+    const match = readme.match(/```mermaid\n([\s\S]*?)\n```/);
+    assert.ok(match, 'README.md must contain a mermaid block');
+    assert.strictEqual(match[1].trim(), mmd.trim(), 'architecture-diagram.mmd must match README.md mermaid block');
+  });
+});
