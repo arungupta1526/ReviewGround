@@ -5,7 +5,8 @@
 **The Universal, High-Precision AI Code Reviewer & Post-CI Verification Engine for GitHub Actions.**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
-[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-v1-purple.svg?logo=githubactions)](https://github.com/marketplace/actions/reviewground)
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Marketplace-ReviewGround-purple.svg?logo=githubactions)](https://github.com/marketplace/actions/reviewground-ai-code-reviewer-ci-verification)
+[![Latest Release](https://img.shields.io/github/v/release/arungupta1526/ReviewGround?color=blue&label=Latest%20Release)](https://github.com/arungupta1526/ReviewGround/releases)
 [![Node Runtime](https://img.shields.io/badge/Node-24%20LTS-green.svg?logo=node.js)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-blue.svg?logo=typescript)](package.json)
 [![Zod](https://img.shields.io/badge/Zod-4.6.5-3E67B1.svg?logo=zod)](package.json)
@@ -63,6 +64,9 @@
 | **Large PR Handling** | Truncates randomly | **Priority-Based Diff Packing (P0: Auth/API/DB first)** |
 | **Test Coverage** | Not supported | **Auto-detects uncovered exports + suggests test stubs** |
 | **Cost Transparency** | Hidden / opaque | **Token count & estimated cost footer per review** |
+| **Secret & PII Redaction** | Raw diff secrets sent to 3rd-party servers | **Pre-flight local masking (AWS, Stripe, GitHub, JWT, SSH)** |
+| **Coding Rules Ingestion** | Requires proprietary config file | **Auto-ingests `AGENTS.md`, `CLAUDE.md`, `.cursorrules`** |
+| **CI Failure Gating** | Spams reviews on non-compiling code | **`skip-on-ci-failure` pauses reviews on broken builds** |
 | **PR Comment Noise** | Spams 5–10 new comments per PR push | **Single In-Place Sticky Comment (Updated via PATCH)** |
 | **CI Duration Tracking** | Not supported | **Workflow Jobs API Duration Metrics (`9s`, `1m 24s`)** |
 | **Local / Air-Gapped AI** | Not supported | **Self-hosted Ollama / Together AI / vLLM compatible** |
@@ -448,6 +452,11 @@ jobs:
           build-result: ''                       # e.g. ${{ needs.build.result }}
           test-result: ''                        # e.g. ${{ needs.test.result }}
           extra-stages: ''                       # e.g. '[{"name":"Deploy","result":"success"}]'
+
+          # ── Sticky Comment & Workflow Identifiers (Optional) ──────────────
+          comment-tag: '<!-- reviewground-code-review -->' # HTML anchor identifying the sticky PR comment
+          pr-number: ''                          # PR number (auto-detected from GitHub event if omitted)
+          run-id: ''                             # Workflow run ID for stage durations (defaults to GITHUB_RUN_ID)
         env:
           # ── BYOK Provider API Keys (set any one or multiple in GitHub Secrets) ──
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -991,9 +1000,13 @@ rules:
 Before code diffs leave your GitHub Actions runner to reach external AI providers, ReviewGround runs a deterministic pre-flight sanitization pass to redact sensitive credentials:
 * **AWS Access Keys** (`AKIA...`) ➔ `[REDACTED_SECRET:AWS_KEY]`
 * **GitHub Tokens** (`ghp_...`, `github_pat_...`) ➔ `[REDACTED_SECRET:GITHUB_TOKEN]`
-* **Slack Tokens** (`xoxb-...`, `xoxp-...`) ➔ `[REDACTED_SECRET:SLACK_TOKEN]`
-* **OpenAI & Anthropic API Keys** (`sk-proj-...`, `sk-ant-...`) ➔ `[REDACTED_SECRET:...]`
-* **Private RSA/EC/SSH Keys** (`-----BEGIN PRIVATE KEY-----`) ➔ `[REDACTED_SECRET:PRIVATE_KEY]`
+* **Stripe Secret & Restricted Keys** (`sk_live_...`, `rk_live_...`) ➔ `[REDACTED_SECRET:STRIPE_KEY]`
+* **Google Cloud & Gemini Keys** (`AIzaSy...`) ➔ `[REDACTED_SECRET:GOOGLE_API_KEY]`
+* **Slack User & Bot Tokens** (`xoxb-...`, `xoxp-...`) ➔ `[REDACTED_SECRET:SLACK_TOKEN]`
+* **OpenAI & Anthropic Keys** (`sk-proj-...`, `sk-ant-...`) ➔ `[REDACTED_SECRET:OPENAI_KEY]` / `[REDACTED_SECRET:ANTHROPIC_KEY]`
+* **SendGrid, Twilio, HuggingFace & Postman** (`SG...`, `SK...`, `hf_...`, `PMAK-...`) ➔ `[REDACTED_SECRET:...]`
+* **Discord Bot & Webhook Tokens** (`Bot ...`) ➔ `[REDACTED_SECRET:DISCORD_TOKEN]`
+* **Private RSA/EC/DSA/OpenSSH Keys** (`-----BEGIN ... PRIVATE KEY-----`) ➔ `[REDACTED_SECRET:PRIVATE_KEY]`
 * **Bearer JWT Tokens** (`Bearer eyJ...`) ➔ `Bearer [REDACTED_SECRET:JWT_TOKEN]`
 
 ---
@@ -1085,7 +1098,10 @@ Never guess why an AI review didn't trigger:
 | **Provider Freedom** | ✅ **7 Providers + Custom** | ❌ Proprietary Cloud | ❌ Proprietary Cloud | ✅ BYOK (LiteLLM) | ❌ OpenAI Only |
 | **Local / Private LLMs** | ✅ Ollama, vLLM, Together | ❌ No | ❌ No | ✅ Supported | ❌ No |
 | **1-Click Diff Suggestions** | ✅ Native GitHub | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Interactive Slash Commands** | ✅ **`@explain`/`@fix`/`/review`** | ✅ Yes | ⚠️ Limited | ✅ Yes | ❌ No |
+| **Interactive Commands & Chat** | ✅ **`@explain`/`@fix`/`@chat`/`/review`** | ✅ Yes | ⚠️ Limited | ✅ Yes | ❌ No |
+| **Pre-Flight Secret Redaction** | ✅ **Local Runner Regex (AWS, Stripe, JWT...)** | ❌ Cloud SaaS Exposure | ❌ Cloud SaaS Exposure | ⚠️ Basic | ❌ Raw Diff Sent |
+| **Universal Rule Auto-Ingestion** | ✅ **AGENTS.md, CLAUDE.md, .cursorrules** | ❌ `.coderabbit.yaml` only | ❌ `.qodo.toml` only | ❌ `.pr_agent.toml` only | ⚠️ Copilot Instructions |
+| **CI Failure Gating (Anti-Noise)** | ✅ **`skip-on-ci-failure` Pause** | ❌ Reviews Broken Code | ❌ Reviews Broken Code | ❌ Reviews Broken Code | ❌ Reviews Broken Code |
 | **Multi-Ecosystem Grounding** | ✅ **NPM + PyPI + Crates + Go** | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Google Search Grounding** | ✅ Gemini Live Grounding | ❌ No | ❌ No | ❌ No | ❌ No |
 | **OWASP / CWE Taxonomy** | ✅ **Auto-tagged findings** | ⚠️ Generic text | ⚠️ Generic text | ⚠️ Generic text | ⚠️ Generic text |
@@ -1094,7 +1110,7 @@ Never guess why an AI review didn't trigger:
 | **Cost Transparency Footer** | ✅ **Tokens + USD + Latency** | ❌ Hidden | ❌ Hidden | ❌ Hidden | ❌ Hidden |
 | **CI Duration Metrics** | ✅ **Unique** (GitHub Jobs API) | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Sticky Summary (No Spam)** | ✅ In-place `PATCH` | ✅ Yes | ✅ Yes | ⚠️ Variable | ✅ Yes |
-| **Repository Rules File** | ✅ `.reviewground.yml` | ✅ `.coderabbit.yaml` | ✅ `.qodo.toml` | ✅ `.pr_agent.toml` | ❌ No |
+| **Repository Rules File** | ✅ Dedicated `.reviewground.yml` | ✅ `.coderabbit.yaml` | ✅ `.qodo.toml` | ✅ `.pr_agent.toml` | ❌ No |
 | **GitHub Check Run Gate** | ✅ Native (Pass/Fail) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
 | **PR Description Risk Badge** | ✅ 🟢/🟡/🔴 + Walkthrough | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta |
 | **Multi-Language Output** | ✅ BCP-47 (`ja`, `es`, `zh`...) | ⚠️ Limited | ⚠️ Limited | ✅ Supported | ⚠️ Limited |
