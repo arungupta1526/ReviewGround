@@ -4,13 +4,11 @@ on:
   push:
     branches: [ main ]
     paths-ignore:
-      - '**.md'
       - 'LICENSE'
       - '.vscode/**'
   pull_request:
     branches: [ main ]
     paths-ignore:
-      - '**.md'
       - 'LICENSE'
       - '.vscode/**'
   workflow_dispatch:
