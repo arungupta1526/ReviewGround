@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0](https://github.com/arungupta1526/ReviewGround/compare/v1.3.0...v1.4.0) (2026-10-10)
+
+
+### Features
+
+* **ci:** add skip-on-ci-failure input to pause review on broken builds ([3955714](https://github.com/arungupta1526/ReviewGround/commit/39557148a612f3f78f4af6d7a223a30ddffe341d))
+* **commands:** support conversational PR comment questions and queries ([b384f88](https://github.com/arungupta1526/ReviewGround/commit/b384f88364793fc63c0ae2846c6a390917a8a6c9))
+* **context:** add lightweight repo structure grounder to eliminate utility hallucinations ([65f0b84](https://github.com/arungupta1526/ReviewGround/commit/65f0b84cf500346be96f09c061020404de124682))
+* **github:** add configurable enable-prune-inline-suggestions action input ([245b801](https://github.com/arungupta1526/ReviewGround/commit/245b80125af15971b82ac606137730c022605e6b))
+* **github:** auto-resolve outdated review threads and enforce pagination bounds ([403052d](https://github.com/arungupta1526/ReviewGround/commit/403052d92cf9734e94ddff55dd323a82e564a4c9))
+* **metrics:** add model-aware pricing, 5x architecture diagram, and file tree docs ([6bcf93b](https://github.com/arungupta1526/ReviewGround/commit/6bcf93bcbb2910d8ad9ba0395ffc40149120caca))
+* **metrics:** track cumulative multi-run PR spend and per-CI cost breakdown ([60ab391](https://github.com/arungupta1526/ReviewGround/commit/60ab391a5658bd292b2fdd7d0a715a9615c36a46))
+* **rules:** auto-ingest guidelines from AGENTS.md, .cursorrules, and CLAUDE.md ([000b5d5](https://github.com/arungupta1526/ReviewGround/commit/000b5d59f1fb029ab9821fdeedd8ad2c7b56f3b0))
+* **security:** implement pre-flight diff secret and credential masking ([c67bddf](https://github.com/arungupta1526/ReviewGround/commit/c67bddf538ce0b7979f30666c21d14123e08b860))
+
+
+### Bug Fixes
+
+* **checks:** ensure unicode surrogate pair safe slicing for check runs ([2ba6928](https://github.com/arungupta1526/ReviewGround/commit/2ba69287fff246b7c64b96dbc8034b9f161bdaad))
+* **github:** sanitize repo parameters, add execSync buffer guards, and add modular unit tests ([77f330c](https://github.com/arungupta1526/ReviewGround/commit/77f330cbb13538547957510d23bf43d22cf7b48b))
+* **security:** batch resolve review threads and sanitize pr numbers ([193b289](https://github.com/arungupta1526/ReviewGround/commit/193b289c10299d9252cfc9096bf5ed4d08e3de0e))
+* **security:** eliminate os command injection in git diff using execFileSync ([5d8e9ac](https://github.com/arungupta1526/ReviewGround/commit/5d8e9ac025133329eb33d190580bbe6c2ba5d0cd))
+* **security:** sanitize suggestion backticks and improve pr description regex ([c2e8e43](https://github.com/arungupta1526/ReviewGround/commit/c2e8e4374235d9b1a2a913cbe62a157f4662ac42))
+
 ## [1.3.0](https://github.com/arungupta1526/ReviewGround/compare/v1.2.0...v1.3.0) (2026-10-10)
 
 
