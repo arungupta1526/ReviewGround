@@ -73,31 +73,41 @@ export async function resolvePreviousInlineSuggestions(
     };
 
     const threads = data.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
-    for (const thread of threads) {
-      if (thread.isResolved) continue;
-      const firstCommentBody = thread.comments?.nodes?.[0]?.body ?? '';
-      if (!firstCommentBody.includes('ReviewGround 1-Click Code Suggestion')) continue;
+    const unresolvedThreads = threads.filter(
+      (thread) =>
+        !thread.isResolved &&
+        thread.comments?.nodes?.[0]?.body?.includes('ReviewGround 1-Click Code Suggestion')
+    );
 
-      await fetch('https://api.github.com/graphql', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'User-Agent': 'ReviewGround-AutoResolver',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: `
-            mutation($threadId: ID!) {
-              resolveReviewThread(input: { threadId: $threadId }) {
-                thread { id isResolved }
-              }
-            }
-          `,
-          variables: { threadId: thread.id },
-        }),
-      });
-      console.log(`🧹 Automatically resolved/folded outdated ReviewGround review thread (${thread.id}).`);
-    }
+    await Promise.all(
+      unresolvedThreads.map(async (thread) => {
+        try {
+          const resolveRes = await fetch('https://api.github.com/graphql', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'User-Agent': 'ReviewGround-AutoResolver',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              query: `
+                mutation($threadId: ID!) {
+                  resolveReviewThread(input: { threadId: $threadId }) {
+                    thread { id isResolved }
+                  }
+                }
+              `,
+              variables: { threadId: thread.id },
+            }),
+          });
+          if (resolveRes.ok) {
+            console.log(`🧹 Automatically resolved/folded outdated ReviewGround review thread (${thread.id}).`);
+          }
+        } catch (err: unknown) {
+          console.warn(`⚠️ Failed to resolve thread ${thread.id}:`, err);
+        }
+      })
+    );
   } catch (err: unknown) {
     console.warn('ℹ️ Could not resolve previous review threads via GraphQL:', err);
   }

@@ -40840,30 +40840,38 @@ async function resolvePreviousInlineSuggestions(repo, token, prNumber) {
     if (!res.ok) return;
     const data = await res.json();
     const threads = data.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
-    for (const thread of threads) {
-      if (thread.isResolved) continue;
-      const firstCommentBody = thread.comments?.nodes?.[0]?.body ?? "";
-      if (!firstCommentBody.includes("ReviewGround 1-Click Code Suggestion")) continue;
-      await fetch("https://api.github.com/graphql", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "User-Agent": "ReviewGround-AutoResolver",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          query: `
-            mutation($threadId: ID!) {
-              resolveReviewThread(input: { threadId: $threadId }) {
-                thread { id isResolved }
-              }
-            }
-          `,
-          variables: { threadId: thread.id }
-        })
-      });
-      console.log(`\u{1F9F9} Automatically resolved/folded outdated ReviewGround review thread (${thread.id}).`);
-    }
+    const unresolvedThreads = threads.filter(
+      (thread) => !thread.isResolved && thread.comments?.nodes?.[0]?.body?.includes("ReviewGround 1-Click Code Suggestion")
+    );
+    await Promise.all(
+      unresolvedThreads.map(async (thread) => {
+        try {
+          const resolveRes = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "User-Agent": "ReviewGround-AutoResolver",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              query: `
+                mutation($threadId: ID!) {
+                  resolveReviewThread(input: { threadId: $threadId }) {
+                    thread { id isResolved }
+                  }
+                }
+              `,
+              variables: { threadId: thread.id }
+            })
+          });
+          if (resolveRes.ok) {
+            console.log(`\u{1F9F9} Automatically resolved/folded outdated ReviewGround review thread (${thread.id}).`);
+          }
+        } catch (err) {
+          console.warn(`\u26A0\uFE0F Failed to resolve thread ${thread.id}:`, err);
+        }
+      })
+    );
   } catch (err) {
     console.warn("\u2139\uFE0F Could not resolve previous review threads via GraphQL:", err);
   }
@@ -40874,9 +40882,15 @@ var DEFAULT_COMMENT_TAG = "<!-- reviewground-code-review -->";
 var CI_SECTION_HEADER = "### \u{1F6A6} CI Pipeline Results & Verification";
 var REPO_REGEX = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
 var BRANCH_REGEX = /^[a-zA-Z0-9_./-]+$/;
+var PR_NUMBER_REGEX = /^[1-9][0-9]*$/;
 function validateRepo(repo) {
   if (!repo || !REPO_REGEX.test(repo.trim())) {
     throw new Error(`Invalid repository format: "${repo}". Expected format: owner/repo`);
+  }
+}
+function validatePrNumber(prNumber) {
+  if (!prNumber || !PR_NUMBER_REGEX.test(prNumber.trim())) {
+    throw new Error(`Invalid PR number: "${prNumber}". Expected positive integer.`);
   }
 }
 var InlineSuggestionSchema = external_exports.object({
@@ -40930,6 +40944,7 @@ async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
   if (repo && prNumber && token) {
     try {
       validateRepo(repo);
+      validatePrNumber(prNumber);
       console.log(`\u{1F310} Fetching PR diff directly from GitHub API (/repos/${repo}/pulls/${prNumber})...`);
       const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
         headers: {
@@ -40954,6 +40969,7 @@ async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
 }
 async function fetchPrReviewComment(repo, token, prNumber, commentTag) {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -40978,6 +40994,7 @@ async function fetchPrReviewComment(repo, token, prNumber, commentTag) {
 }
 async function postDirectComment(body, repo, token, prNumber) {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
     method: "POST",
     headers: {
@@ -40996,6 +41013,7 @@ async function postDirectComment(body, repo, token, prNumber) {
 }
 async function postInlineSuggestions(suggestions, token, repo, prNumber) {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   await resolvePreviousInlineSuggestions(repo, token, prNumber);
   if (suggestions.length === 0) {
     console.log("\u2705 No new inline suggestions needed \u2014 previous suggestion threads resolved/folded.");
@@ -41059,6 +41077,7 @@ async function postOrUpdatePrComment(markdown, token, repo, prNumber, commentTag
     return;
   }
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const defaultCommentBody = `${markdown}
 
 ${commentTag}`;
@@ -41133,6 +41152,7 @@ ${commentTag}`;
 // src/github/checks.ts
 async function createCheckRun(reviewText, token, repo, prNumber) {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -41292,6 +41312,7 @@ async function updateOrCreateStickyComment(ciSummaryMarkdown, token, repo, prNum
     return;
   }
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",

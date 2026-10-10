@@ -35,6 +35,23 @@ describe('GitHub API Security & Validation', () => {
     assert.strictEqual(BRANCH_REGEX.test('main`id`'), false);
     assert.strictEqual(BRANCH_REGEX.test('main$(whoami)'), false);
   });
+
+  it('validates PR numbers correctly rejecting non-integers and injection strings', async () => {
+    const { validatePrNumber, PR_NUMBER_REGEX } = await import('../src/github/comments.js');
+    assert.doesNotThrow(() => validatePrNumber('12'));
+    assert.doesNotThrow(() => validatePrNumber('1'));
+    assert.doesNotThrow(() => validatePrNumber('9999'));
+
+    assert.throws(() => validatePrNumber('0'), /Invalid PR number/);
+    assert.throws(() => validatePrNumber('-5'), /Invalid PR number/);
+    assert.throws(() => validatePrNumber('12/comments'), /Invalid PR number/);
+    assert.throws(() => validatePrNumber('12; drop table'), /Invalid PR number/);
+    assert.throws(() => validatePrNumber(''), /Invalid PR number/);
+
+    assert.strictEqual(PR_NUMBER_REGEX.test('42'), true);
+    assert.strictEqual(PR_NUMBER_REGEX.test('0'), false);
+    assert.strictEqual(PR_NUMBER_REGEX.test('abc'), false);
+  });
 });
 
 describe('Token & Cost Transparency Estimator', () => {

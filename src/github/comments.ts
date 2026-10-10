@@ -12,6 +12,7 @@ export const CI_SECTION_HEADER = '### 🚦 CI Pipeline Results & Verification';
 
 export const REPO_REGEX = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
 export const BRANCH_REGEX = /^[a-zA-Z0-9_./-]+$/;
+export const PR_NUMBER_REGEX = /^[1-9][0-9]*$/;
 
 /**
  * Validates repository format strictly to prevent SSRF and path traversal injection.
@@ -19,6 +20,15 @@ export const BRANCH_REGEX = /^[a-zA-Z0-9_./-]+$/;
 export function validateRepo(repo: string): void {
   if (!repo || !REPO_REGEX.test(repo.trim())) {
     throw new Error(`Invalid repository format: "${repo}". Expected format: owner/repo`);
+  }
+}
+
+/**
+ * Validates PR number format strictly to prevent route parameter injection anomalies.
+ */
+export function validatePrNumber(prNumber: string): void {
+  if (!prNumber || !PR_NUMBER_REGEX.test(prNumber.trim())) {
+    throw new Error(`Invalid PR number: "${prNumber}". Expected positive integer.`);
   }
 }
 
@@ -91,6 +101,7 @@ export async function getPullRequestDiff(
   if (repo && prNumber && token) {
     try {
       validateRepo(repo);
+      validatePrNumber(prNumber);
       console.log(`🌐 Fetching PR diff directly from GitHub API (/repos/${repo}/pulls/${prNumber})...`);
       const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
         headers: {
@@ -126,6 +137,7 @@ export async function fetchPrReviewComment(
   commentTag: string
 ): Promise<string | null> {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -160,6 +172,7 @@ export async function postDirectComment(
   prNumber: string
 ): Promise<void> {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
     method: 'POST',
     headers: {
@@ -191,6 +204,7 @@ export async function postInlineSuggestions(
   prNumber: string
 ): Promise<void> {
   validateRepo(repo);
+  validatePrNumber(prNumber);
 
   // Automatically fold/resolve previous ReviewGround suggestions in GitHub UI
   await resolvePreviousInlineSuggestions(repo, token, prNumber);
@@ -273,6 +287,7 @@ export async function postOrUpdatePrComment(
     return;
   }
   validateRepo(repo);
+  validatePrNumber(prNumber);
 
   const defaultCommentBody = `${markdown}\n\n${commentTag}`;
   const headers = {

@@ -3,7 +3,7 @@
  * Handles PR description updates with AI summaries and GitHub Check Run gate creation.
  */
 
-import { validateRepo } from './comments.js';
+import { validateRepo, validatePrNumber } from './comments.js';
 
 /**
  * Auto-updates the PR body with an AI-generated summary, changed-areas
@@ -16,6 +16,7 @@ export async function updatePrDescription(
   prNumber: string
 ): Promise<void> {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -91,6 +92,7 @@ export async function createCheckRun(
   prNumber: string
 ): Promise<void> {
   validateRepo(repo);
+  validatePrNumber(prNumber);
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
