@@ -70,6 +70,11 @@ inputs:
     required: false
     default: 'true'
 
+  enable-prune-inline-suggestions:
+    description: 'Auto-delete / prune outdated previous ReviewGround inline suggestions on subsequent CI runs (default false)'
+    required: false
+    default: 'false'
+
   enable-npm-verify:
     description: 'Verify package updates against live npm registry to eliminate version hallucinations (default true)'
     required: false

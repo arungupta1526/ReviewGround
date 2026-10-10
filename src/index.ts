@@ -210,6 +210,11 @@ async function run(): Promise<void> {
         })(),
         enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
         enableInlineSuggestions: getBooleanInput('enable-inline-suggestions', ['ENABLE_INLINE_SUGGESTIONS'], true),
+        enablePruneInlineSuggestions: getBooleanInput(
+          'enable-prune-inline-suggestions',
+          ['ENABLE_PRUNE_INLINE_SUGGESTIONS', 'REVIEWGROUND_PRUNE_INLINE_SUGGESTIONS'],
+          false
+        ),
         enableNpmVerify: getBooleanInput('enable-npm-verify', ['ENABLE_NPM_VERIFY'], true),
         // Feature 3: Multi-ecosystem registry grounding
         enableMultiRegistryVerify: getBooleanInput('enable-multi-registry-verify', ['ENABLE_MULTI_REGISTRY_VERIFY'], true),

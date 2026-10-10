@@ -408,8 +408,9 @@ jobs:
           max-tokens: '2048'                     # Max response token length (default: '2048')
           ignore-patterns: ''                    # Comma-separated globs e.g. 'dist/**,*.min.js'
 
-          # ── Grounding & Inline Suggestions (on by default) ───────────────
+          # ── Grounding & Inline Suggestions ───────────────
           enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons
+          enable-prune-inline-suggestions: 'false' # Auto-delete / prune outdated inline suggestions on subsequent CI runs (default: 'false')
           enable-search-grounding: 'true'        # Google Search tool grounding for Gemini
           enable-npm-verify: 'true'              # Live registry.npmjs.org anti-hallucination check
 
@@ -585,6 +586,76 @@ flowchart TD
     STICKY_FIND -- "Not Found" --> CREATE
 ```
 
+<p align="center">
+  <em>High-resolution architecture renders available in <a href="./images/architecture-diagram.svg">SVG format</a> and <a href="./images/architecture-diagram.png">PNG format</a>.</em>
+</p>
+
+---
+
+## 📂 Repository & Modular Architecture
+
+ReviewGround is architected around domain-driven, single-responsibility modules adhering to strict file-size limits (<350 lines per module):
+
+```text
+reviewground/
+├── .github/
+│   ├── workflows/             # CI testing & Release Please release automation
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── dependabot.yml
+├── images/                    # Visual assets & architecture diagrams (.mmd, .svg, .png)
+│   ├── architecture-diagram.mmd
+│   ├── architecture-diagram.svg
+│   ├── architecture-diagram.png
+│   ├── pr-1-click-code-suggestion.png
+│   ├── pr-description-risk-badge.png
+│   ├── pr-sticky-patch-history.png
+│   └── pr-sticky-review-comment.png
+├── src/
+│   ├── github/                # 🐙 GitHub REST API integration
+│   │   ├── checks.ts          # GitHub Check Run gates & PR description updates
+│   │   ├── comments.ts        # Diff fetching, inline suggestions & comment management
+│   │   ├── reviewThreads.ts   # GraphQL reviewThreads query & auto-resolve/outdated folding
+│   │   ├── stickyComment.ts   # In-place sticky comment update lifecycle
+│   │   ├── workflowJobs.ts    # GitHub Actions API workflow run & stage duration tracking
+│   │   └── index.ts
+│   ├── metrics/               # ⚡ Cost, latency & token usage calculations
+│   │   ├── costEstimator.ts   # Model-aware pricing & cost transparency footer
+│   │   └── index.ts
+│   ├── prompts/               # 🧠 Prompt engineering & guideline loaders
+│   │   ├── reviewPrompt.ts    # Provider-optimized prompts (XML/JSON/Markdown) & OWASP injection
+│   │   └── index.ts
+│   ├── providers/             # 🔌 BYOK Multi-Provider Engine (Native fetch adapters)
+│   │   ├── anthropic.ts       # Anthropic Claude 3.5 Haiku/Sonnet adapter
+│   │   ├── custom.ts          # OpenAI-compatible custom endpoints (vLLM, Ollama)
+│   │   ├── deepseek.ts        # DeepSeek V3 / R1 reasoning adapter
+│   │   ├── gemini.ts          # Google Gemini adapter with Google Search grounding
+│   │   ├── groq.ts            # Groq ultra-fast LPU inference adapter
+│   │   ├── openai.ts          # OpenAI GPT-4o / GPT-4o-mini adapter
+│   │   ├── openrouter.ts      # OpenRouter aggregator adapter
+│   │   ├── types.ts           # Provider interfaces & response contracts
+│   │   └── index.ts           # ProviderManager with auto-detection & fallback chains
+│   ├── utils/
+│   │   └── fetchWithRetry.ts  # Native exponential backoff with jitter
+│   ├── diffPrioritizer.ts     # 🎯 Smart diff prioritization (P0 auth/APIs, P2 locks/assets)
+│   ├── packageRegistry.ts     # 📦 Multi-ecosystem real-time registry verification (npm, PyPI, crates, go)
+│   ├── prDescriber.ts         # 📝 PR description & walkthrough table generator
+│   ├── reviewer.ts            # 🛡️ Core review orchestrator
+│   ├── slashCommands.ts       # 💬 Interactive PR comments dispatcher (@reviewground explain/fix)
+│   ├── summary.ts             # 🚦 Post-CI verification summary generator
+│   ├── testCoverageDetector.ts# 🧪 Missing unit test detection & stub suggestions
+│   └── index.ts               # 🚀 GitHub Action entry point
+├── test/                      # 🧪 Unit & invariant test suites (100% passing)
+│   ├── features.test.ts       # Tests for registry verification, diff prioritization, test coverage
+│   ├── github.test.ts         # Tests for repo sanitization, SSRF protection, token & cost calculation
+│   ├── prDescriber.test.ts    # Tests for PR description generation & body merging
+│   ├── providers.test.ts      # Tests for multi-provider BYOK routing & fallbacks
+│   ├── reviewer.test.ts       # Tests for review engine, inline suggestions & Zod validation
+│   └── summary.test.ts        # Tests for CI summary generation, durations & badges
+├── action.yml                 # GitHub Action metadata & input definitions (<125 char description)
+├── package.json
+└── tsconfig.json
+```
+
 ---
 
 ## 🚀 Key Architectural Pillars
@@ -651,6 +722,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Custom API Key** | `llm-api-key` | `LLM_API_KEY`, `CUSTOM_API_KEY` | — |
 | **Search Grounding** | `enable-search-grounding`| `ENABLE_SEARCH_GROUNDING` | `true` |
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
+| **Prune Inline Suggestions** | `enable-prune-inline-suggestions` | `ENABLE_PRUNE_INLINE_SUGGESTIONS` | `false` — auto-deletes / prunes outdated ReviewGround inline suggestions on subsequent CI runs |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |
 | **Multi-Registry Verify** | `enable-multi-registry-verify` | `ENABLE_MULTI_REGISTRY_VERIFY` | `true` — also verifies PyPI, Crates.io & Go module proxy |
 | **Cost Footer** | `enable-cost-footer` | `ENABLE_COST_FOOTER` | `true` — shows token count + estimated cost in sticky comment |
@@ -792,13 +864,25 @@ Enable/disable: `enable-multi-registry-verify: 'true'` (default on).
 
 ---
 
-### 🪙 Feature 4: Token & Cost Transparency Footer
+### 🪙 Feature 4: Token & Cumulative Cost Transparency Footer
 
-Every sticky review comment now includes a transparency stat bar at the bottom:
+Every sticky review comment includes an exact transparency stat bar tracking **both single-run cost and cumulative PR lifecycle spend** across subsequent CI runs:
 
-```
-⚡ ReviewGround | Model: `gemini-3.5-flash-lite` | Est. Tokens: 1,840 | Est. Cost: ~$0.0002 | Latency: 1.2s
-Saved ~$20–50/mo vs proprietary AI review bots
+```markdown
+> ⚡ ReviewGround | Model: `gemini-3.5-flash-lite` | Est. Tokens: 8,258 | Est. Cost: ~$0.0008 (This Run) | Latency: 3.4s
+> 💰 Cumulative PR Spend: ~$0.0014 (2 CI Runs, 15,678 tokens total)
+>
+> <details>
+> <summary>📜 Cost History per CI Run (2 runs)</summary>
+>
+> | Run | Commit | Model | Tokens | Cost |
+> |:---|:---|:---|:---|:---|
+> | Run #1 | `5d8e9ac` | `gemini-3.5-flash-lite` | 7,420 | ~$0.0006 |
+> | Run #2 | `2ba6928` | `gemini-3.5-flash-lite` | 8,258 | ~$0.0008 |
+>
+> Total Spend for PR: ~$0.0014 (~99.9% cheaper than proprietary bots)
+> </details>
+> Saved ~$20–50/mo vs proprietary AI review bots
 ```
 
 Enable/disable: `enable-cost-footer: 'true'` (default on).
