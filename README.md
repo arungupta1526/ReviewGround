@@ -477,10 +477,10 @@ flowchart TD
     end
 
     subgraph SLASH["1b. Slash Command Handler (mode: slash-command)"]
-        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain|fix / /review full|security|performance"]:::newfeature
+        PARSE_CMD["Parse Command from Comment Body<br/>@reviewground explain, fix / /review on-demand"]:::newfeature
         CMD_EXPLAIN["AI Explains Flagged Issues<br/>with Educational Context"]:::newfeature
         CMD_FIX["AI Generates Concrete Code Patch"]:::newfeature
-        CMD_REVIEW["On-Demand Focused Re-Review<br/>full | security | performance | standard"]:::newfeature
+        CMD_REVIEW["On-Demand Focused Re-Review<br/>full, security, performance, standard"]:::newfeature
     end
 
     subgraph DESCRIBE["1c. PR Description & Walkthrough (mode: describe)"]
@@ -521,6 +521,7 @@ flowchart TD
         COMMENT_INLINE["PR Diff Review Comments API<br/>1-Click 'Apply suggestion' In Diff"]:::output
         CHECK_RUN["GitHub Check Run (Pass/Fail Gate)<br/>Blocks Merge on Critical Vulnerabilities"]:::output
         PR_DESC["Auto-Update PR Description<br/>Injects Walkthrough Table & Risk Badge"]:::output
+        COMMENT_REPLY["PR Comment Reply API<br/>Direct Conversational Response"]:::output
     end
 
     subgraph SUMMARY_FLOW["6. Post-CI Pipeline Sticky Summary & Dynamic Job Discovery"]
@@ -536,7 +537,10 @@ flowchart TD
     %% Trigger routing
     PR --> BOT
     COMMENT_EVT --> PARSE_CMD
-    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX & CMD_REVIEW
+    PARSE_CMD --> CMD_EXPLAIN & CMD_FIX
+    PARSE_CMD --> CMD_REVIEW
+    CMD_EXPLAIN & CMD_FIX --> COMMENT_REPLY
+    CMD_REVIEW --> STICKY_FIND
     BOT -- "Yes" --> SKIP
     BOT -- "No" --> PARSE
     PARSE --> RULES
@@ -561,6 +565,7 @@ flowchart TD
     CALL_FALLBACK -- "Fallback Succeeded" --> ZOD
     ZOD --> TEST_CHECK
     TEST_CHECK --> COST_FOOTER
+    COST_FOOTER --> STICKY_FIND
     COST_FOOTER --> COMMENT_INLINE & CHECK_RUN
     COST_FOOTER -. "generate-pr-description: true" .-> PR_DESC
     PR_DESC --> MERGE_BODY
