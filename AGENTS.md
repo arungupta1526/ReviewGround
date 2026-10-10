@@ -22,14 +22,20 @@ This document establishes the mandatory architectural rules, Git workflows, secu
 4. **Strict No-Unsolicited-Push Rule & PR Creation Protocol**:
    - **Never Push Automatically**: After committing locally, **NEVER execute `git push` to remote (`origin`) without informing and obtaining explicit confirmation from the user in chat first**. All commits must remain strictly local until pre-approved.
    - **Auto-Create PR Upon Push Confirmation**: Once the user explicitly approves pushing, push the branch (`git push -u origin <branch>`). Always check first if a PR already exists for this branch (`gh pr list --head <branch>`); if an existing PR is found, inform the developer of the updated PR. If no PR exists, immediately open a Pull Request against `main` using GitHub CLI (`gh pr create`) with a detailed title, summary, and verification details.
-   - **Strict No-Unsolicited-Merge Rule**: **NEVER merge the PR into `main` automatically**. Always ask/inform the developer and wait for their explicit command before merging any PR.
-5. **Always Commit with Detailed Information**:
-   - Never make short, vague, or one-liner commit messages (e.g., avoid `fix: updates` or `feat: changes`).
-   - Every commit message MUST include:
-     - A conventional commit header (`feat(...)`, `fix(...)`, `refactor(...)`).
-     - A bulleted description detailing *what* changed across files/modules.
-     - The architectural rationale (*why*).
-     - Verification confirmation (e.g., `npm run build` and unit test status).
+   - **Strict No-Unsolicited-Merge Rule & Clean Branch Deletion (`--delete-branch`)**:
+     - **NEVER merge the PR into `main` automatically**. Always ask/inform the developer and wait for their explicit command before merging any PR.
+     - **Mandatory Branch Deletion & Rebase Upon Merge**: When the user explicitly instructs to merge, ALWAYS execute the merge using rebase with automatic branch deletion enabled (`gh pr merge <pr-number> --rebase --delete-branch`), followed by cleaning up local tracking references (`git checkout main && git pull && git fetch --prune --all && git branch -D <branch>`) to prevent stale remote and local branch accumulation while preserving granular commit history for Release Please.
+5. **Mandatory Granular & Atomic Commits Standard**:
+   - **Never Bundle Multiple Unrelated Features into a Single Monolithic Commit**: When implementing multiple features, fixes, or modules, create independent, atomic commits for each logical unit of work.
+   - **Release Please Multi-Feature Changelogs**: Granular conventional commit headers ensure that Google Release Please generates rich, comprehensive changelogs populated with distinct entries under `### Features` and `### Bug Fixes`.
+   - **Surgical Rollback & Auditability**: Atomic commits enable precise `git bisect` tracking and surgical `git revert` operations without rolling back unrelated functionality.
+   - **Always Commit with Detailed Information**:
+     - Never make short, vague, or one-liner commit messages (e.g., avoid `fix: updates` or `feat: changes`).
+     - Every commit message MUST include:
+       - A conventional commit header (`feat(...)`, `fix(...)`, `refactor(...)`, `docs(...)`).
+       - A bulleted description detailing *what* changed across files/modules.
+       - The architectural rationale (*why*).
+       - Verification confirmation (e.g., `npm run build` and unit test status).
 6. **Mandatory Post-Change README Walkthrough**:
    - After completing ANY code modification, bug fix, or feature addition, the AI agent MUST perform a thorough review and walkthrough of `README.md`.
    - Ensure complete documentation parity: all new inputs, environment variables, model defaults, provider capabilities, or workflow examples must be accurately reflected in `README.md`, regardless of whether README changes were explicitly requested.
