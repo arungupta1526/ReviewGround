@@ -41003,9 +41003,10 @@ async function postInlineSuggestions(suggestions, token, repo, prNumber) {
         console.warn(`\u26A0\uFE0F Skipping inline suggestion with suspicious path traversal: ${item.path}`);
         continue;
       }
+      const sanitizedSuggestion = item.suggestion.replace(/```/g, "\\`\\`\\`");
       const body = `### \u{1F916} ReviewGround 1-Click Code Suggestion
 \`\`\`suggestion
-${item.suggestion.trimEnd()}
+${sanitizedSuggestion.trimEnd()}
 \`\`\``;
       const postRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/comments`, {
         method: "POST",

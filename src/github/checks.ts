@@ -55,10 +55,11 @@ export async function updatePrDescription(
 
     let newBody: string;
     if (originalBody.includes(DESCRIPTION_TAG)) {
-      newBody = originalBody.replace(
-        /\n\n---\n\n### 🤖 ReviewGround AI Summary[\s\S]*?<!-- reviewground-pr-description -->/,
-        aiSection
-      );
+      const parts = originalBody.split(DESCRIPTION_TAG);
+      const cleanOriginal = (parts[0] ?? '')
+        .replace(/\n\n---\n\n### 🤖 ReviewGround AI Summary[\s\S]*$/, '')
+        .trimEnd();
+      newBody = cleanOriginal + aiSection;
     } else {
       newBody = originalBody + aiSection;
     }

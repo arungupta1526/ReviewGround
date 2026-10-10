@@ -207,7 +207,8 @@ export async function postInlineSuggestions(
         continue;
       }
 
-      const body = `### 🤖 ReviewGround 1-Click Code Suggestion\n\`\`\`suggestion\n${item.suggestion.trimEnd()}\n\`\`\``;
+      const sanitizedSuggestion = item.suggestion.replace(/```/g, '\\`\\`\\`');
+      const body = `### 🤖 ReviewGround 1-Click Code Suggestion\n\`\`\`suggestion\n${sanitizedSuggestion.trimEnd()}\n\`\`\``;
 
       const postRes = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/comments`, {
         method: 'POST',
