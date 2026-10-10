@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0](https://github.com/arungupta1526/ReviewGround/compare/v1.1.0...v1.2.0) (2026-10-10)
+
+
+### Features
+
+* **audit:** comprehensive defect fixes, enterprise merge gates, and performance hardening ([774bc84](https://github.com/arungupta1526/ReviewGround/commit/774bc8491dc6b17fd9dbbca0e93713569a1efcf3))
+* **audit:** implement remaining audit items — I1, I5, I7, F1, F3, F6 ([dc9319c](https://github.com/arungupta1526/ReviewGround/commit/dc9319cad1c92682339b0de8bbc0c84b369fac07))
+* **core:** initialize ReviewGround universal AI reviewer action with Node 24 & TypeScript 7 ([e8a17e2](https://github.com/arungupta1526/ReviewGround/commit/e8a17e25579f542fb3fd642cde0e873634d483bc))
+* **docs:** update action references to arungupta1526/ReviewGround and enable zero-commit variable resolution ([dbcd575](https://github.com/arungupta1526/ReviewGround/commit/dbcd57508c66ce9eee8286601fc4ffc6068d987e))
+* dynamic CI job discovery, smart CI auto-skip, clear error notices, and Google Release Please ([3eaf670](https://github.com/arungupta1526/ReviewGround/commit/3eaf670f82f48aceb265e741ee0df6273e6b4fcb))
+* **providers:** add custom fallback models and expand built-in fallback chains ([86dcbfa](https://github.com/arungupta1526/ReviewGround/commit/86dcbfacba55ec4a4f99799729621c9d271ff18c))
+* **providers:** add first-class OpenRouterProvider and preserve custom third-party routing ([e18675b](https://github.com/arungupta1526/ReviewGround/commit/e18675b0bdbd956d79556f771a000f6170ef35ce))
+* **providers:** add smart model-to-provider detection and document fallback chains ([4a02093](https://github.com/arungupta1526/ReviewGround/commit/4a0209348fb6929dd263bed519b70dc8d3d999ac))
+* **providers:** enforce custom model override hierarchy and add dependabot automation ([4c66959](https://github.com/arungupta1526/ReviewGround/commit/4c66959dc0b39d7e528ad9a4fd57d0f0d8b5a152))
+* **reviewer:** brand review header with ReviewGround and add collapsible demo screenshots to README ([2a765db](https://github.com/arungupta1526/ReviewGround/commit/2a765db9fecad57e83f8a0f060cb17eac8dc4e18))
+* **reviewer:** implement audit bug fixes, granular configuration, and custom guidelines ([b25c5f4](https://github.com/arungupta1526/ReviewGround/commit/b25c5f4cbaf5bbe7cc3a2360018e7315f8c35969))
+* **summary:** add dynamic CI workflow job discovery and secret aliases ([71177de](https://github.com/arungupta1526/ReviewGround/commit/71177def048863acd8110134df8751bf24b053cd))
+* **summary:** add smart CI table auto-skip and clear PR setup/error notices ([a8dfbed](https://github.com/arungupta1526/ReviewGround/commit/a8dfbed25d7717326dbb3b121254f25e51796dc2))
+
+
+### Bug Fixes
+
+* **action:** shorten action.yml description under 125 chars for Marketplace ([fd1c2ba](https://github.com/arungupta1526/ReviewGround/commit/fd1c2ba40d50f2b0f898e9afef3a46ce8371b480))
+* **action:** shorten action.yml description under 125 chars for Marketplace compatibility ([c9148b1](https://github.com/arungupta1526/ReviewGround/commit/c9148b1d83f30e695e836723bd7fd62a9b4b42a8))
+* **providers:** update Gemini and Groq models to verified active endpoints ([ca55b94](https://github.com/arungupta1526/ReviewGround/commit/ca55b943927a44b154e386fda8abdafbe2769a80))
+
 ## [1.1.0](https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0) (2026-10-09)
 
 
