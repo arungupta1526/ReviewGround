@@ -19,6 +19,7 @@ This document establishes the mandatory architectural rules, Git workflows, secu
    - **Unit Tests**: Run `npm test` locally to ensure 100% of invariant and provider test suites pass cleanly.
    - **Inspect Changes**: Always check `git status`, `git diff`, and `git log -n 3 --oneline` before staging/committing to prevent accidental secret leaks or unneeded files.
    - **Environment Integrity**: Ensure any new environment variables or action inputs are documented in both `action.yml` and `README.md`. Never hardcode API keys, tokens, or private credentials into source code.
+   - **Architecture Diagram Assets**: Whenever the architecture workflow is touched, ensure both `images/architecture-diagram.svg` and high-res `images/architecture-diagram.png` are regenerated using the mandatory Mermaid CLI command and verified against `npm test`.
 4. **Strict No-Unsolicited-Push Rule & PR Creation Protocol**:
    - **Never Push Automatically**: After committing locally, **NEVER execute `git push` to remote (`origin`) without informing and obtaining explicit confirmation from the user in chat first**. All commits must remain strictly local until pre-approved.
    - **Auto-Create PR Upon Push Confirmation**: Once the user explicitly approves pushing, push the branch (`git push -u origin <branch>`). Always check first if a PR already exists for this branch (`gh pr list --head <branch>`); if an existing PR is found, inform the developer of the updated PR. If no PR exists, immediately open a Pull Request against `main` using GitHub CLI (`gh pr create`) with a detailed title, summary, and verification details.
@@ -36,9 +37,21 @@ This document establishes the mandatory architectural rules, Git workflows, secu
        - A bulleted description detailing *what* changed across files/modules.
        - The architectural rationale (*why*).
        - Verification confirmation (e.g., `npm run build` and unit test status).
-6. **Mandatory Post-Change README Walkthrough**:
+6. **Mandatory Post-Change README Walkthrough & Architecture Diagram Sync**:
    - After completing ANY code modification, bug fix, or feature addition, the AI agent MUST perform a thorough review and walkthrough of `README.md`.
    - Ensure complete documentation parity: all new inputs, environment variables, model defaults, provider capabilities, or workflow examples must be accurately reflected in `README.md`, regardless of whether README changes were explicitly requested.
+   - **Mandatory Architecture Diagram & Asset Generation**:
+     - Whenever the architecture diagram or workflow changes, ensure the Mermaid block in `README.md` and `images/architecture-diagram.mmd` remain 100% character-for-character identical (enforced by `npm test`).
+     - ALWAYS regenerate the SVG and high-resolution PNG image assets using:
+       ```bash
+       npx -y @mermaid-js/mermaid-cli \
+         -i images/architecture-diagram.mmd \
+         -o images/architecture-diagram.svg -b white && \
+       npx -y @mermaid-js/mermaid-cli \
+         -i images/architecture-diagram.mmd \
+         -o images/architecture-diagram.png \
+         -b white -s 5
+       ```
 7. **Automated Changelog & Releases via Google Release Please**:
    - The repository uses **Google Release Please** (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`) to automate semver version bumps, GitHub Releases, and `CHANGELOG.md` updates.
    - **No Manual Changelog Edits Required**: Because Release Please parses Git history automatically, engineers and AI agents do NOT need to manually edit `CHANGELOG.md` on every release. Release Please opens an automated Release PR directly against `main` containing the updated changelog and version bumps.
