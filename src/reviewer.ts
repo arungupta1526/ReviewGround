@@ -13,6 +13,8 @@ import { analyzeTestCoverage } from './testCoverageDetector.js';
 import { runPrDescribe } from './prDescriber.js';
 import { buildReviewPrompt } from './prompts/index.js';
 import { generateCostFooter, parseCostHistory, CostHistoryEntry } from './metrics/index.js';
+import { sanitizeDiffSecrets } from './utils/secretSanitizer.js';
+import { buildRepoContext } from './utils/repoContext.js';
 import {
   DEFAULT_COMMENT_TAG,
   CI_SECTION_HEADER,
@@ -83,6 +85,9 @@ export interface ReviewerConfig {
   enableSmartDiffPriority?: boolean;
   enableOwaspTagging?: boolean;
   enableTestCoverageCheck?: boolean;
+  skipOnCiFailure?: boolean;
+  buildResult?: string;
+  testResult?: string;
   commentTag?: string;
   geminiApiKey?: string;
   openaiApiKey?: string;
@@ -189,6 +194,31 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     return null;
   }
 
+  // CI-aware failure pause gating
+  if (
+    config.skipOnCiFailure &&
+    (config.buildResult?.toLowerCase() === 'failure' || config.testResult?.toLowerCase() === 'failure')
+  ) {
+    console.log('⏸️ CI build or test stage failed. Pausing AI code review per skip-on-ci-failure.');
+    if (token && repo && prNumber) {
+      const ciFailureNotice = `## 🛡️ ReviewGround — AI Code Review Paused ⏸️
+
+> ⚠️ **Deep AI Review Paused Due to Broken CI**
+> 
+> Critical CI pipeline checks failed:
+> - **Build Stage**: \`${config.buildResult || 'unknown'}\`
+> - **Test Stage**: \`${config.testResult || 'unknown'}\`
+> 
+> To prevent generating noise on broken/non-compiling code and save API tokens, automated AI review is paused until build and test errors are resolved. Push a fix to resume!
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+
+      await postOrUpdatePrComment(ciFailureNotice, token, repo, prNumber, commentTag);
+    }
+    return null;
+  }
+
   // Get diff
   const rawDiff = await getPullRequestDiff(repo, prNumber, token, config.baseBranch || 'main');
   if (!rawDiff || rawDiff.trim().length === 0) {
@@ -197,11 +227,18 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   }
 
   // Apply ignore patterns
-  const diff = applyIgnorePatterns(rawDiff, config.ignorePatterns);
-  if (!diff) {
+  const ignoredDiff = applyIgnorePatterns(rawDiff, config.ignorePatterns);
+  if (!ignoredDiff) {
     console.log('ℹ️  All changed files were excluded by ignore-patterns. Skipping review.');
     return null;
   }
+
+  // Pre-flight secret & PII sanitization
+  const sanitizeResult = sanitizeDiffSecrets(ignoredDiff);
+  if (sanitizeResult.redactedCount > 0) {
+    console.log(`🔒 Sanitized ${sanitizeResult.redactedCount} secret(s) (${sanitizeResult.redactedTypes.join(', ')}) from diff before dispatching to AI.`);
+  }
+  const diff = sanitizeResult.sanitizedDiff;
 
   // Registry Grounding
   let packageGroundTruthNote = '';
@@ -230,6 +267,9 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   }
   console.log(`🤖 Analyzing code diff (${truncatedDiff.length} characters)...`);
 
+  // Lightweight repo context outline
+  const repoContext = buildRepoContext(diff);
+
   // Build provider-tailored prompt
   const prompt = buildReviewPrompt({
     reviewLevel: config.reviewLevel,
@@ -238,6 +278,7 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     provider: config.provider,
     model: config.model,
     packageGroundTruthNote,
+    repoContext,
     truncatedDiff,
   });
 

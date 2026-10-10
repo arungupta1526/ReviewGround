@@ -182,6 +182,11 @@ inputs:
     required: false
     default: 'true'
 
+  skip-on-ci-failure:
+    description: 'Skip deep AI code review if CI build or test stages failed to prevent noise on broken code (default false)'
+    required: false
+    default: 'false'
+
 outputs:
   reviewed:
     description: 'Whether an AI code review was generated ("true" or "false")'
