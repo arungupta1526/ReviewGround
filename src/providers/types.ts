@@ -13,6 +13,8 @@ export interface ProviderResponse {
   provider: string;
   searchGroundingUsed?: boolean;
   reasoning?: string;
+  /** Wall-clock latency in milliseconds for the AI provider call (Feature 4: cost transparency) */
+  latencyMs?: number;
 }
 
 export interface ReviewOptions {

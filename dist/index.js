@@ -39895,9 +39895,11 @@ var ProviderManager = class {
     for (const provider of chain) {
       try {
         console.log(`\u{1F916} [ReviewGround] Attempting review with ${provider.name}...`);
+        const startMs = Date.now();
         const response = await provider.review(prompt, options);
         if (response && response.text.trim().length > 0) {
-          console.log(`\u2705 [ReviewGround] Successfully generated review via ${provider.name} (${response.model}).`);
+          response.latencyMs = Date.now() - startMs;
+          console.log(`\u2705 [ReviewGround] Successfully generated review via ${provider.name} (${response.model}) in ${response.latencyMs}ms.`);
           return response;
         }
       } catch (err) {
@@ -39910,6 +39912,507 @@ var ProviderManager = class {
     return null;
   }
 };
+
+// src/packageRegistry.ts
+function extractNpmDeps(diffText) {
+  const deps = [];
+  const ignore = ["name", "version", "description", "scripts", "bin", "main", "types", "engines", "node", "npm"];
+  for (const line of diffText.split("\n")) {
+    if (!line.startsWith("+")) continue;
+    const match = line.match(/^\+\s*"(@?[a-z0-9_./-]+)"\s*:\s*"[\^~>=<]*([0-9]+(?:\.[0-9]+)*[^"]*)"/);
+    if (match && !ignore.includes(match[1])) {
+      deps.push({ name: match[1], version: match[2] });
+    }
+  }
+  return deps;
+}
+async function verifyNpmPackage(name, version2) {
+  const base = { name, requestedVersion: version2, registry: "npm", verified: false, note: "" };
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version2)}`, {
+      signal: AbortSignal.timeout(4e3)
+    });
+    if (res.ok) {
+      base.verified = true;
+      base.note = `${name}@${version2} is confirmed published on npm`;
+      return base;
+    }
+    const latestRes = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`, {
+      signal: AbortSignal.timeout(4e3)
+    });
+    if (latestRes.ok) {
+      const info = await latestRes.json();
+      base.resolvedVersion = info.version;
+      base.verified = true;
+      base.note = `${name} (latest on npm registry: ${info.version})`;
+    }
+  } catch {
+  }
+  return base;
+}
+function extractPypiDeps(diffText) {
+  const deps = [];
+  for (const line of diffText.split("\n")) {
+    if (!line.startsWith("+")) continue;
+    const stripped = line.slice(1).trim();
+    const reqMatch = stripped.match(/^([A-Za-z0-9_\-]+)\s*[=><~!^]+\s*([0-9][^\s,;#]*)/);
+    if (reqMatch) {
+      deps.push({ name: reqMatch[1].toLowerCase().replace(/_/g, "-"), version: reqMatch[2] });
+      continue;
+    }
+    const pyprojectMatch = stripped.match(/["']?([A-Za-z0-9_\-]+)["']?\s*[=><~!^]+\s*["']?([0-9][^"',\s]*)/);
+    if (pyprojectMatch) {
+      deps.push({ name: pyprojectMatch[1].toLowerCase().replace(/_/g, "-"), version: pyprojectMatch[2] });
+    }
+  }
+  return deps;
+}
+async function verifyPypiPackage(name, version2) {
+  const base = { name, requestedVersion: version2, registry: "pypi", verified: false, note: "" };
+  try {
+    const res = await fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version2)}/json`, {
+      signal: AbortSignal.timeout(4e3),
+      headers: { "User-Agent": "ReviewGround-CI-Reviewer/1.3.0" }
+    });
+    if (res.ok) {
+      base.verified = true;
+      base.note = `${name}==${version2} is confirmed published on PyPI`;
+      return base;
+    }
+    const latestRes = await fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
+      signal: AbortSignal.timeout(4e3),
+      headers: { "User-Agent": "ReviewGround-CI-Reviewer/1.3.0" }
+    });
+    if (latestRes.ok) {
+      const info = await latestRes.json();
+      base.resolvedVersion = info.info?.version;
+      base.verified = true;
+      base.note = `${name} (latest on PyPI: ${info.info?.version})`;
+    }
+  } catch {
+  }
+  return base;
+}
+function extractCratesDeps(diffText) {
+  const deps = [];
+  for (const line of diffText.split("\n")) {
+    if (!line.startsWith("+")) continue;
+    const simpleMatch = line.match(/^\+\s*([a-z0-9_\-]+)\s*=\s*"([0-9][^"]*)"/);
+    if (simpleMatch) {
+      deps.push({ name: simpleMatch[1], version: simpleMatch[2] });
+      continue;
+    }
+    const tableMatch = line.match(/^\+\s*([a-z0-9_\-]+)\s*=\s*\{[^}]*version\s*=\s*"([0-9][^"]*)"/);
+    if (tableMatch) {
+      deps.push({ name: tableMatch[1], version: tableMatch[2] });
+    }
+  }
+  return deps;
+}
+async function verifyCratesPackage(name, version2) {
+  const base = { name, requestedVersion: version2, registry: "crates", verified: false, note: "" };
+  try {
+    const res = await fetch(
+      `https://crates.io/api/v1/crates/${encodeURIComponent(name)}/${encodeURIComponent(version2)}`,
+      { signal: AbortSignal.timeout(4e3), headers: { "User-Agent": "ReviewGround-CI-Reviewer/1.3.0" } }
+    );
+    if (res.ok) {
+      base.verified = true;
+      base.note = `${name} v${version2} is confirmed published on crates.io`;
+      return base;
+    }
+    const latestRes = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`, {
+      signal: AbortSignal.timeout(4e3),
+      headers: { "User-Agent": "ReviewGround-CI-Reviewer/1.3.0" }
+    });
+    if (latestRes.ok) {
+      const info = await latestRes.json();
+      base.resolvedVersion = info.crate?.newest_version;
+      base.verified = true;
+      base.note = `${name} (latest on crates.io: ${info.crate?.newest_version})`;
+    }
+  } catch {
+  }
+  return base;
+}
+function extractGoDeps(diffText) {
+  const deps = [];
+  for (const line of diffText.split("\n")) {
+    if (!line.startsWith("+")) continue;
+    const match = line.match(/^\+\s*(?:require\s+)?([a-zA-Z0-9.\-_/]+)\s+(v[0-9][^\s]*)/);
+    if (match) {
+      deps.push({ name: match[1], version: match[2] });
+    }
+  }
+  return deps;
+}
+async function verifyGoModule(name, version2) {
+  const base = { name, requestedVersion: version2, registry: "go", verified: false, note: "" };
+  try {
+    const encodedName = name.replace(/[A-Z]/g, (c) => `!${c.toLowerCase()}`);
+    const encodedVersion = version2.replace(/[A-Z]/g, (c) => `!${c.toLowerCase()}`);
+    const res = await fetch(
+      `https://proxy.golang.org/${encodedName}/@v/${encodedVersion}.info`,
+      { signal: AbortSignal.timeout(4e3), headers: { "User-Agent": "ReviewGround-CI-Reviewer/1.3.0" } }
+    );
+    if (res.ok) {
+      base.verified = true;
+      base.note = `${name} ${version2} is confirmed on Go module proxy`;
+      return base;
+    }
+    const listRes = await fetch(`https://proxy.golang.org/${encodedName}/@latest`, {
+      signal: AbortSignal.timeout(4e3),
+      headers: { "User-Agent": "ReviewGround-CI-Reviewer/1.3.0" }
+    });
+    if (listRes.ok) {
+      const info = await listRes.json();
+      base.resolvedVersion = info.Version;
+      base.verified = true;
+      base.note = `${name} (latest on Go proxy: ${info.Version})`;
+    }
+  } catch {
+  }
+  return base;
+}
+function detectEcosystem(diffText) {
+  const files = [...diffText.matchAll(/^diff --git a\/(.+?) b\//gm)].map((m) => m[1]);
+  const hasNpm = files.some((f) => f === "package.json" || f.endsWith("/package.json"));
+  const hasPypi = files.some(
+    (f) => f.endsWith("requirements.txt") || f === "pyproject.toml" || f.endsWith("/pyproject.toml")
+  );
+  const hasCargo = files.some((f) => f === "Cargo.toml" || f.endsWith("/Cargo.toml"));
+  const hasGo = files.some((f) => f === "go.mod" || f.endsWith("/go.mod"));
+  const count = [hasNpm, hasPypi, hasCargo, hasGo].filter(Boolean).length;
+  if (count > 1) return "mixed";
+  if (hasNpm) return "npm";
+  if (hasPypi) return "pypi";
+  if (hasCargo) return "crates";
+  if (hasGo) return "go";
+  return "npm";
+}
+async function verifyPackagesMultiRegistry(diffText) {
+  const ecosystem = detectEcosystem(diffText);
+  const allVerified = [];
+  const ecosystemsChecked = [];
+  const extractors = {
+    npm: extractNpmDeps,
+    pypi: extractPypiDeps,
+    crates: extractCratesDeps,
+    go: extractGoDeps
+  };
+  const verifiers = {
+    npm: verifyNpmPackage,
+    pypi: verifyPypiPackage,
+    crates: verifyCratesPackage,
+    go: verifyGoModule
+  };
+  const checkEco = async (eco) => {
+    const deps = extractors[eco](diffText);
+    if (deps.length === 0) return;
+    ecosystemsChecked.push(eco);
+    const results = await Promise.all(deps.map((d) => verifiers[eco](d.name, d.version)));
+    allVerified.push(...results.filter((r) => r.verified));
+  };
+  const ecos = ecosystem === "mixed" ? ["npm", "pypi", "crates", "go"] : [ecosystem];
+  await Promise.all(ecos.map(checkEco));
+  return {
+    notes: allVerified.map((p) => p.note),
+    ecosystems: ecosystemsChecked,
+    totalVerified: allVerified.length
+  };
+}
+
+// src/diffPrioritizer.ts
+var P0_PATTERNS = [
+  /\/(auth|authentication|authorization|oauth|jwt|session|login|password|token)/i,
+  /\/(api|routes?|controllers?|handlers?|endpoints?)\//i,
+  /\/(db|database|models?|migrations?|schema|query|repository|dao)\//i,
+  /\/(payments?|billing|stripe|transactions?|wallet|checkout)\//i,
+  /\/(security|crypto|encryption|signature|certificates?|ssl|tls)\//i,
+  /\/(middleware|interceptors?|guards?|policies?)\//i,
+  /\/(config|env|secrets?|credentials?)\//i,
+  /\.(sql|prisma)$/i
+];
+var P2_PATTERNS = [
+  /package-lock\.json$/,
+  /pnpm-lock\.yaml$/,
+  /yarn\.lock$/,
+  /Cargo\.lock$/,
+  /go\.sum$/,
+  /\.(min\.js|min\.css|map)$/,
+  /dist\//,
+  /build\//,
+  /\.snap$/,
+  // Jest/Vitest snapshots
+  /\/__snapshots__\//,
+  /\/fixtures?\//,
+  /\.(svg|png|jpg|jpeg|gif|ico|webp|woff|woff2|ttf|eot)$/i,
+  /\.generated\./,
+  /\.pb\.go$/,
+  // protobuf generated Go
+  /\_pb2\.py$/,
+  // protobuf generated Python
+  /\/vendor\//,
+  /node_modules\//,
+  /\.d\.ts$/
+  // TypeScript declaration files
+];
+function scoreFile(filePath) {
+  for (const pat of P2_PATTERNS) {
+    if (pat.test(filePath)) {
+      return { tier: 2, reason: "auto-generated / asset / lockfile" };
+    }
+  }
+  for (const pat of P0_PATTERNS) {
+    if (pat.test(filePath)) {
+      return { tier: 0, reason: "security-critical path (auth/API/DB/payments)" };
+    }
+  }
+  return { tier: 1, reason: "standard application code" };
+}
+function splitAndPrioritizeDiff(rawDiff) {
+  const hunkBlocks = rawDiff.split(/(?=^diff --git)/m).filter((b) => b.trim().length > 0);
+  return hunkBlocks.map((block) => {
+    const headerMatch = block.match(/^diff --git a\/(.+?) b\//m);
+    const filePath = headerMatch ? headerMatch[1] : "unknown";
+    const { tier, reason } = scoreFile(filePath);
+    return { filePath, tier, reason, hunkBlock: block, charCount: block.length };
+  });
+}
+function packPrioritizedDiff(rawDiff, maxChars = 28e3) {
+  const totalInputChars = rawDiff.length;
+  if (totalInputChars <= maxChars) {
+    return {
+      packedDiff: rawDiff,
+      skippedFiles: [],
+      priorityLog: "",
+      totalInputChars,
+      packedChars: totalInputChars
+    };
+  }
+  const entries = splitAndPrioritizeDiff(rawDiff);
+  const p0 = entries.filter((e) => e.tier === 0);
+  const p1 = entries.filter((e) => e.tier === 1);
+  const p2 = entries.filter((e) => e.tier === 2);
+  const packed = [];
+  const skipped = [];
+  let remaining = maxChars;
+  for (const entry of p0) {
+    if (remaining <= 0) {
+      skipped.push(`${entry.filePath} [P0 \u2014 budget exhausted]`);
+      continue;
+    }
+    if (entry.charCount <= remaining) {
+      packed.push(entry.hunkBlock);
+      remaining -= entry.charCount;
+    } else {
+      const partial2 = entry.hunkBlock.slice(0, remaining);
+      packed.push(partial2 + "\n... [truncated \u2014 P0 file too large] ...");
+      remaining = 0;
+    }
+  }
+  for (const entry of p1) {
+    if (remaining <= 0) {
+      skipped.push(`${entry.filePath} [P1 \u2014 budget exhausted]`);
+      continue;
+    }
+    if (entry.charCount <= remaining) {
+      packed.push(entry.hunkBlock);
+      remaining -= entry.charCount;
+    } else {
+      skipped.push(`${entry.filePath} [P1 \u2014 too large for remaining budget]`);
+    }
+  }
+  for (const entry of p2) {
+    skipped.push(`${entry.filePath} [P2 \u2014 low-priority auto-generated/asset]`);
+  }
+  const packedDiff = packed.join("");
+  const tierSummary = [
+    `P0 (critical): ${p0.length} file(s)`,
+    `P1 (standard): ${p1.length} file(s)`,
+    `P2 (skipped): ${p2.length} file(s)`
+  ].join(", ");
+  const priorityLog = `\u{1F3AF} Smart Diff Prioritization: ${tierSummary}. Budget: ${maxChars.toLocaleString()} chars. Packed: ${packedDiff.length.toLocaleString()} chars. Skipped: ${skipped.length} file(s).`;
+  return {
+    packedDiff,
+    skippedFiles: skipped,
+    priorityLog,
+    totalInputChars,
+    packedChars: packedDiff.length
+  };
+}
+
+// src/testCoverageDetector.ts
+var TEST_FILE_PATTERNS = [
+  /\.test\.(ts|tsx|js|jsx)$/,
+  /\.spec\.(ts|tsx|js|jsx)$/,
+  /_test\.go$/,
+  /test_.*\.py$/,
+  /_spec\.rb$/,
+  /\.test\.py$/,
+  /\/test\/.*\.(ts|js|py|go|rb)$/,
+  /\/tests\/.*\.(ts|js|py|go|rb)$/,
+  /\/__tests__\//
+];
+function isTestFile(filePath) {
+  return TEST_FILE_PATTERNS.some((p) => p.test(filePath));
+}
+function detectLanguage(filePath) {
+  if (/\.(ts|tsx)$/.test(filePath)) return "typescript";
+  if (/\.(js|jsx)$/.test(filePath)) return "javascript";
+  if (/\.py$/.test(filePath)) return "python";
+  if (/\.go$/.test(filePath)) return "go";
+  if (/\.rb$/.test(filePath)) return "ruby";
+  return "unknown";
+}
+function extractNewSymbols(diffBlock, filePath, lang) {
+  const symbols = [];
+  for (const line of diffBlock.split("\n")) {
+    if (!line.startsWith("+") || line.startsWith("+++")) continue;
+    const code = line.slice(1);
+    if (lang === "typescript" || lang === "javascript") {
+      const fnMatch = code.match(/^\s*export\s+(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)/);
+      if (fnMatch) {
+        symbols.push({ filePath, symbolName: fnMatch[1], symbolType: "function", language: lang });
+        continue;
+      }
+      const classMatch = code.match(/^\s*export\s+(?:abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)/);
+      if (classMatch) {
+        symbols.push({ filePath, symbolName: classMatch[1], symbolType: "class", language: lang });
+        continue;
+      }
+      const arrowMatch = code.match(/^\s*export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s+)?\(/);
+      if (arrowMatch) {
+        symbols.push({ filePath, symbolName: arrowMatch[1], symbolType: "function", language: lang });
+        continue;
+      }
+      const routeMatch = code.match(/^\s*(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)/);
+      if (routeMatch) {
+        symbols.push({ filePath, symbolName: `${routeMatch[1].toUpperCase()} ${routeMatch[2]}`, symbolType: "endpoint", language: lang });
+      }
+    } else if (lang === "python") {
+      const fnMatch = code.match(/^\s*def\s+([A-Za-z][A-Za-z0-9_]*)\s*\(/);
+      if (fnMatch && !fnMatch[1].startsWith("_")) {
+        symbols.push({ filePath, symbolName: fnMatch[1], symbolType: "function", language: lang });
+        continue;
+      }
+      const classMatch = code.match(/^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)/);
+      if (classMatch) {
+        symbols.push({ filePath, symbolName: classMatch[1], symbolType: "class", language: lang });
+      }
+    } else if (lang === "go") {
+      const fnMatch = code.match(/^\s*func\s+(?:\([^)]*\)\s+)?([A-Z][A-Za-z0-9_]*)\s*\(/);
+      if (fnMatch) {
+        symbols.push({ filePath, symbolName: fnMatch[1], symbolType: "function", language: lang });
+      }
+    }
+  }
+  return symbols;
+}
+function generateTestStub(symbol2) {
+  switch (symbol2.language) {
+    case "typescript":
+    case "javascript": {
+      if (symbol2.symbolType === "class") {
+        return `describe('${symbol2.symbolName}', () => {
+  it('should instantiate correctly', () => {
+    const instance = new ${symbol2.symbolName}();
+    expect(instance).toBeDefined();
+  });
+});`;
+      }
+      if (symbol2.symbolType === "endpoint") {
+        const [method, path] = symbol2.symbolName.split(" ");
+        return `it('${method} ${path} \u2014 should respond with 200', async () => {
+  const res = await request(app).${method?.toLowerCase() ?? "get"}('${path}');
+  expect(res.status).toBe(200);
+});`;
+      }
+      return `it('${symbol2.symbolName} \u2014 should work correctly', () => {
+  // Arrange
+  // Act
+  const result = ${symbol2.symbolName}();
+  // Assert
+  expect(result).toBeDefined();
+});`;
+    }
+    case "python": {
+      if (symbol2.symbolType === "class") {
+        return `def test_${symbol2.symbolName.toLowerCase()}_instantiation():
+    instance = ${symbol2.symbolName}()
+    assert instance is not None`;
+      }
+      return `def test_${symbol2.symbolName}():
+    # Arrange + Act
+    result = ${symbol2.symbolName}()
+    # Assert
+    assert result is not None`;
+    }
+    case "go": {
+      return `func Test${symbol2.symbolName}(t *testing.T) {
+    // Arrange
+    // Act
+    // Assert
+    t.Log("Test for ${symbol2.symbolName}")
+}`;
+    }
+    default:
+      return `// TODO: Add test for ${symbol2.symbolName}`;
+  }
+}
+function analyzeTestCoverage(rawDiff) {
+  const hunkBlocks = rawDiff.split(/(?=^diff --git)/m).filter((b) => b.trim().length > 0);
+  const testFilesChanged = [];
+  const allNewSymbols = [];
+  for (const block of hunkBlocks) {
+    const headerMatch = block.match(/^diff --git a\/(.+?) b\//m);
+    if (!headerMatch) continue;
+    const filePath = headerMatch[1];
+    if (isTestFile(filePath)) {
+      testFilesChanged.push(filePath);
+      continue;
+    }
+    const lang = detectLanguage(filePath);
+    if (lang === "unknown" || lang === "ruby") continue;
+    const symbols = extractNewSymbols(block, filePath, lang);
+    allNewSymbols.push(...symbols);
+  }
+  const uncoveredSymbols = allNewSymbols.filter(
+    (s) => s.symbolType === "function" || s.symbolType === "endpoint"
+  );
+  const hasTestCoverage = testFilesChanged.length > 0 || uncoveredSymbols.length === 0;
+  const warnings = [];
+  if (uncoveredSymbols.length > 0 && testFilesChanged.length === 0) {
+    const names = uncoveredSymbols.map((s) => `\`${s.symbolName}\``).join(", ");
+    warnings.push(
+      `\u26A0\uFE0F **${uncoveredSymbols.length} new exported function(s)/endpoint(s) detected without corresponding unit tests:** ${names}`
+    );
+  } else if (uncoveredSymbols.length > 0 && testFilesChanged.length > 0) {
+    warnings.push(
+      `\u2139\uFE0F **${uncoveredSymbols.length} new exported symbol(s) added.** Test files were updated \u2014 ensure coverage includes all new functionality.`
+    );
+  }
+  const stubSymbols = uncoveredSymbols.slice(0, 3);
+  let suggestedTests = "";
+  if (stubSymbols.length > 0 && testFilesChanged.length === 0) {
+    const stubs = stubSymbols.map((s) => `// ${s.filePath} \u2192 ${s.symbolName}
+${generateTestStub(s)}`).join("\n\n");
+    suggestedTests = `<details>
+<summary>\u{1F9EA} Click to view suggested unit test stubs</summary>
+
+\`\`\`${stubSymbols[0]?.language ?? "typescript"}
+${stubs}
+\`\`\`
+</details>`;
+  }
+  return {
+    newSymbols: allNewSymbols,
+    testFilesChanged,
+    hasTestCoverage,
+    warnings,
+    suggestedTests
+  };
+}
 
 // src/reviewer.ts
 function truncateDiffClean(diff, maxChars = 32e3) {
@@ -39929,61 +40432,6 @@ var InlineSuggestionSchema = external_exports.object({
 var InlineSuggestionsListSchema = external_exports.array(InlineSuggestionSchema);
 var DEFAULT_COMMENT_TAG = "<!-- reviewground-code-review -->";
 var CI_SECTION_HEADER = "### \u{1F6A6} CI Pipeline Results & Verification";
-async function verifyPackagesInDiff(diffText) {
-  const verified = [];
-  const lines = diffText.split("\n");
-  const addedDeps = [];
-  for (const line of lines) {
-    if (!line.startsWith("+")) continue;
-    const match = line.match(/^\+\s*"(@?[a-z0-9_./-]+)"\s*:\s*"[\^~>=<]*([0-9]+(?:\.[0-9]+)*[^"]*)"/);
-    if (match) {
-      const name = match[1];
-      const version2 = match[2];
-      const ignore = [
-        "name",
-        "version",
-        "description",
-        "scripts",
-        "bin",
-        "main",
-        "types",
-        "engines",
-        "node",
-        "npm"
-      ];
-      if (!ignore.includes(name)) {
-        addedDeps.push({ name, version: version2 });
-      }
-    }
-  }
-  if (addedDeps.length === 0) return verified;
-  await Promise.all(
-    addedDeps.map(async (dep) => {
-      try {
-        const res = await fetch(
-          `https://registry.npmjs.org/${encodeURIComponent(dep.name)}/${encodeURIComponent(dep.version)}`,
-          { signal: AbortSignal.timeout(3e3) }
-        );
-        if (res.ok) {
-          verified.push(`${dep.name}@${dep.version}`);
-          return;
-        }
-        const latestRes = await fetch(
-          `https://registry.npmjs.org/${encodeURIComponent(dep.name)}/latest`,
-          { signal: AbortSignal.timeout(3e3) }
-        );
-        if (latestRes.ok) {
-          const info = await latestRes.json();
-          if (info.version) {
-            verified.push(`${dep.name} (latest on registry: ${info.version})`);
-          }
-        }
-      } catch {
-      }
-    })
-  );
-  return verified;
-}
 async function getPullRequestDiff(repo, prNumber, token, baseBranch = "main") {
   try {
     const diff = (0, import_child_process.execSync)(
@@ -40227,19 +40675,30 @@ async function runReview(config2 = {}) {
     }
   }
   let packageGroundTruthNote = "";
-  if (config2.enableNpmVerify !== false) {
-    const verifiedPackages = await verifyPackagesInDiff(diff);
-    if (verifiedPackages.length > 0) {
+  if (config2.enableNpmVerify !== false || config2.enableMultiRegistryVerify !== false) {
+    const registryResult = await verifyPackagesMultiRegistry(diff);
+    if (registryResult.totalVerified > 0) {
+      const ecoLabel = registryResult.ecosystems.length > 0 ? registryResult.ecosystems.join(", ").toUpperCase() : "Registry";
       packageGroundTruthNote = `
-Verified Real-Time NPM Registry Releases:
-${verifiedPackages.map((p) => `- ${p} is confirmed published on npm`).join("\n")}
+Verified Real-Time ${ecoLabel} Registry Releases:
+${registryResult.notes.map((n) => `- ${n}`).join("\n")}
 (IMPORTANT: Do NOT claim that these verified packages or versions are invalid or non-existent!)
 `;
     }
   }
-  const truncatedDiff = truncateDiffClean(diff);
-  if (diff.length > 32e3) {
-    console.log(`\u26A0\uFE0F Large diff detected (${diff.length} chars) \u2014 truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
+  let truncatedDiff;
+  if (config2.enableSmartDiffPriority !== false && diff.length > 28e3) {
+    const priorityResult = packPrioritizedDiff(diff, 28e3);
+    truncatedDiff = priorityResult.packedDiff;
+    console.log(priorityResult.priorityLog);
+    if (priorityResult.skippedFiles.length > 0) {
+      console.log(`\u{1F5C2}\uFE0F Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(", ")}${priorityResult.skippedFiles.length > 10 ? "..." : ""}`);
+    }
+  } else {
+    truncatedDiff = truncateDiffClean(diff);
+    if (diff.length > 32e3) {
+      console.log(`\u26A0\uFE0F Large diff detected (${diff.length} chars) \u2014 truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
+    }
   }
   console.log(`\u{1F916} Analyzing code diff (${truncatedDiff.length} characters)...`);
   const reviewLevel = config2.reviewLevel || "standard";
@@ -40266,6 +40725,15 @@ ${content}
       }
     }
   }
+  const owaspInstruction = config2.enableOwaspTagging !== false ? `
+Security Taxonomy Requirement: When flagging any security issue, you MUST include the relevant OWASP Top 10 category and CWE ID. Use this format:
+- \u274C **CWE-89: SQL Injection** (OWASP A03:2021 \u2014 Injection)
+- \u26A0\uFE0F **CWE-79: Cross-Site Scripting (XSS)** (OWASP A03:2021)
+- \u{1F512} **CWE-798: Hardcoded Credentials** (OWASP A07:2021 \u2014 Identification and Authentication Failures)
+- \u{1F511} **CWE-284: Improper Access Control** (OWASP A01:2021)
+- \u{1F310} **CWE-918: SSRF** (OWASP A10:2021 \u2014 Server-Side Request Forgery)
+Always cite the exact CWE-ID and OWASP category when security issues are found.
+` : "";
   const lang = (config2.reviewLanguage || "en").toLowerCase().trim();
   const languageInstruction = lang !== "en" && lang !== "english" ? `
 IMPORTANT: Write your entire review response in the following language: ${lang}.
@@ -40277,7 +40745,7 @@ IMPORTANT: Write your entire review response in the following language: ${lang}.
 You are a Principal Software Engineer &amp; DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 If the code looks solid and has no issues at this review level, respond with "\u2705 All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions:
@@ -40297,7 +40765,7 @@ Task: Analyze the git diff below and produce a structured code review.
 
 Review focus:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 Response format:
 - Start with a brief executive summary (1-2 sentences).
 - Use markdown sections (## Bugs, ## Security, ## Performance, etc.) as appropriate for this review level.
@@ -40322,10 +40790,11 @@ Analyze the following git diff.
 
 ## Review Focus
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 ## Instructions
 - If the code is clean, say: "\u2705 All changes look clean, performant, and secure!" followed by 2 bullet points.
 - Otherwise, list findings grouped under ### headers (Bugs, Security, Performance, etc.).
+- When flagging security issues, always include the OWASP category and CWE ID.
 - For specific line fixes, append at the very end:
 
 \`\`\`inline_suggestions
@@ -40341,7 +40810,7 @@ ${truncatedDiff}
     prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 If the code looks solid and has no issues at this review level, respond with "\u2705 All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
@@ -40413,15 +40882,52 @@ ${truncatedDiff}
       console.warn("\u2139\uFE0F Could not parse inline_suggestions JSON block from AI output.");
     }
   }
+  let testCoverageSection = "";
+  if (config2.enableTestCoverageCheck !== false) {
+    const coverageReport = analyzeTestCoverage(diff);
+    if (coverageReport.warnings.length > 0) {
+      testCoverageSection = `
+
+### \u{1F9EA} Test Coverage
+
+${coverageReport.warnings.join("\n")}
+${coverageReport.suggestedTests}`;
+      console.log(`\u26A0\uFE0F [TestCheck] ${coverageReport.warnings[0]}`);
+    }
+  }
   const groundingBadge = response.searchGroundingUsed ? " \u{1F310} *Live Search Grounded*" : "";
   const engineString = `${response.provider} (${response.model})${groundingBadge}`;
+  let costFooter = "";
+  if (config2.enableCostFooter !== false) {
+    const inputTokensEst = Math.ceil(truncatedDiff.length / 4);
+    const outputTokensEst = Math.ceil(response.text.length / 4);
+    const totalTokens = inputTokensEst + outputTokensEst;
+    const costPerMToken = {
+      gemini: 0.1,
+      openai: 0.15,
+      anthropic: 0.8,
+      groq: 0.06,
+      deepseek: 0.14,
+      openrouter: 0.1,
+      custom: 0
+    };
+    const providerKey = response.provider.toLowerCase().split(" ")[0] ?? "custom";
+    const costPerM = costPerMToken[providerKey] ?? 0.15;
+    const estimatedCostUsd = totalTokens / 1e6 * costPerM;
+    const latencyMs = response.latencyMs ?? 0;
+    const latencyStr = latencyMs > 0 ? `${(latencyMs / 1e3).toFixed(1)}s` : "\u2014";
+    costFooter = `
+
+> \u26A1 **ReviewGround** | Model: \`${response.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} | Latency: ${latencyStr}  
+> *Saved ~$20\u201350/mo vs proprietary AI review bots*`;
+  }
   const markdownOutput = `## \u{1F6E1}\uFE0F ReviewGround AI Code Review & Security Analysis
 *Reviewer Engine: ${engineString}*
 
-${cleanReviewText}
+${cleanReviewText}${testCoverageSection}
 
 ---
-*Generated automatically by [ReviewGround](https://github.com/arungupta1526/ReviewGround) (${engineString}).*
+*Generated automatically by [ReviewGround](https://github.com/arungupta1526/ReviewGround) (${engineString}).*${costFooter}
 `;
   console.log("\n================== \u{1F916} AI CODE REVIEW ==================\n");
   console.log(markdownOutput);
@@ -40970,6 +41476,250 @@ ${summaryMarkdown}
   return summaryMarkdown;
 }
 
+// src/slashCommands.ts
+function parseSlashCommand(commentBody) {
+  const text = commentBody.trim().toLowerCase();
+  if (/@reviewground\s+explain/i.test(text)) return "explain";
+  if (/@reviewground\s+fix/i.test(text)) return "fix";
+  if (/\/review\s+full/i.test(text)) return "review-full";
+  if (/\/review\s+security/i.test(text)) return "review-security";
+  if (/\/review\s+performance/i.test(text)) return "review-performance";
+  if (/\/review\s+standard/i.test(text)) return "review-standard";
+  if (/\/review\b/i.test(text)) return "review-standard";
+  return null;
+}
+async function fetchPrReviewComment(repo, token, prNumber, commentTag) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "ReviewGround-SlashCommand"
+  };
+  let page = 1;
+  while (true) {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
+      { headers }
+    );
+    if (!res.ok) break;
+    const comments = await res.json();
+    if (comments.length === 0) break;
+    const found = comments.find((c) => c.body?.includes(commentTag));
+    if (found) return found.body ?? null;
+    if (comments.length < 100) break;
+    page++;
+  }
+  return null;
+}
+async function postDirectComment(body, repo, token, prNumber) {
+  const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "ReviewGround-SlashCommand",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ body })
+  });
+  if (res.ok) {
+    console.log(`\u2705 [SlashCmd] Posted response comment on PR #${prNumber}`);
+  } else {
+    console.warn(`\u26A0\uFE0F [SlashCmd] Failed to post response: HTTP ${res.status}`);
+  }
+}
+async function executeExplain(config2, providerManager, options, originalReview) {
+  const context = originalReview ? `The previous ReviewGround review found the following issues:
+
+${originalReview.slice(0, 3e3)}` : "No previous review context available.";
+  const prompt = `You are a Principal Software Engineer conducting a PR review.
+
+A developer has asked: "@reviewground explain"
+
+They want to understand WHY the previously flagged issues were raised. 
+
+${context}
+
+Provide a clear, educational explanation (3-5 bullet points) of:
+1. Why each flagged issue matters from a security/correctness/performance perspective.
+2. What could go wrong if the issue is not addressed.
+3. Industry best-practice context.
+
+Keep the tone constructive and educational. Format with markdown.`;
+  const response = await providerManager.executeReview(prompt, options);
+  if (!response) {
+    await postDirectComment(
+      `> \u{1F916} **@reviewground explain** \u2014 Sorry, the AI provider failed to generate an explanation. Please check your API key or try again.`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const body = `### \u{1F916} ReviewGround \u2014 Explanation
+
+> *Responding to your \`@reviewground explain\` request*
+
+${response.text}
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround) \xB7 ${response.provider} (${response.model})*`;
+  await postDirectComment(body, config2.repo, config2.githubToken, config2.prNumber);
+}
+async function executeFix(config2, providerManager, options, diff, originalReview) {
+  const diffContext = diff ? diff.slice(0, 8e3) : "No diff available.";
+  const reviewContext = originalReview ? `Previous review findings:
+${originalReview.slice(0, 2e3)}` : "";
+  const prompt = `You are a Principal Software Engineer.
+
+A developer has asked: "@reviewground fix"
+
+They want concrete code fix suggestions for the issues you found.
+
+${reviewContext}
+
+Git diff context:
+\`\`\`diff
+${diffContext}
+\`\`\`
+
+Provide:
+1. Specific, copy-paste ready code fixes for the most critical issue(s).
+2. Brief explanation of WHY this fix is correct.
+3. If multiple fixes needed, address them in order of severity.
+
+Format each fix as a fenced code block with the language identifier.`;
+  const response = await providerManager.executeReview(prompt, options);
+  if (!response) {
+    await postDirectComment(
+      `> \u{1F916} **@reviewground fix** \u2014 Sorry, the AI provider failed to generate a fix. Please check your API key or try again.`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const body = `### \u{1F916} ReviewGround \u2014 Suggested Fix
+
+> *Responding to your \`@reviewground fix\` request*
+
+${response.text}
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround) \xB7 ${response.provider} (${response.model})*`;
+  await postDirectComment(body, config2.repo, config2.githubToken, config2.prNumber);
+}
+async function executeOnDemandReview(config2, providerManager, options, diff, reviewLevel, commandTag) {
+  if (!diff || diff.trim().length === 0) {
+    await postDirectComment(
+      `> \u{1F916} **ReviewGround** \u2014 Could not fetch PR diff to perform on-demand review. Please ensure the \`GITHUB_TOKEN\` has \`contents: read\` permission.`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const focusMap = {
+    full: "1. Critical bugs, edge-cases, and memory leaks.\n2. Security risks (OWASP Top 10, secret leaks, injection, XSS).\n3. Performance bottlenecks.\n4. Code style, readability, naming, and documentation gaps.\n5. Test coverage gaps.",
+    security: "1. Security risks ONLY: OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization, hardcoded credentials, privilege escalation, and missing authentication/authorization.",
+    performance: "1. Performance bottlenecks ONLY: N+1 queries, unbounded loops, missing cache, large allocations, synchronous blocking in async contexts, unindexed DB searches, and unoptimized algorithms.",
+    standard: "1. Critical bugs and edge-case regressions.\n2. Security risks (OWASP Top 10, secret leaks, injection).\n3. Performance bottlenecks."
+  };
+  const focus = focusMap[reviewLevel] ?? focusMap.standard;
+  const label = reviewLevel === "full" ? "\u{1F50D} Full Comprehensive" : reviewLevel === "security" ? "\u{1F512} Security-Focused" : reviewLevel === "performance" ? "\u26A1 Performance-Focused" : "\u{1F4CB} Standard";
+  const prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
+This is an on-demand ${label} review triggered via \`/review ${reviewLevel}\` slash command.
+
+Review focus:
+${focus}
+
+If the code looks clean, respond with "\u2705 All changes look clean!" and a brief 2-bullet summary.
+
+Git Diff:
+\`\`\`diff
+${diff.slice(0, 28e3)}
+\`\`\``;
+  const response = await providerManager.executeReview(prompt, options);
+  if (!response) {
+    await postDirectComment(
+      `> \u{1F916} **ReviewGround** \u2014 On-demand review failed. Please check your AI provider API key.`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const header = `## \u{1F6E1}\uFE0F ReviewGround \u2014 ${label} Review
+*Triggered by \`/review ${reviewLevel}\` slash command \xB7 ${response.provider} (${response.model})*`;
+  const body = `${header}
+
+${response.text}
+
+---
+*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
+  await postOrUpdatePrComment(body, config2.githubToken, config2.repo, config2.prNumber, commandTag);
+}
+async function handleSlashCommand(config2) {
+  const command = parseSlashCommand(config2.commentBody);
+  if (!command) {
+    console.log("\u2139\uFE0F [SlashCmd] No recognized ReviewGround command found in comment. Skipping.");
+    return;
+  }
+  console.log(`\u26A1 [SlashCmd] Detected command: ${command} on PR #${config2.prNumber}`);
+  const commentTag = config2.commentTag || DEFAULT_COMMENT_TAG;
+  const providerManager = new ProviderManager({
+    preferredProvider: config2.provider,
+    geminiApiKey: config2.geminiApiKey,
+    openaiApiKey: config2.openaiApiKey,
+    anthropicApiKey: config2.anthropicApiKey,
+    groqApiKey: config2.groqApiKey,
+    deepseekApiKey: config2.deepseekApiKey,
+    openrouterApiKey: config2.openrouterApiKey,
+    llmBaseUrl: config2.llmBaseUrl,
+    llmApiKey: config2.llmApiKey
+  });
+  const configuredProviders = providerManager.getConfiguredProviders();
+  if (configuredProviders.length === 0) {
+    await postDirectComment(
+      `> \u26A0\uFE0F **ReviewGround** \u2014 No AI provider API key is configured. Add \`GEMINI_API_KEY\`, \`OPENAI_API_KEY\`, or another provider key to your repository secrets.`,
+      config2.repo,
+      config2.githubToken,
+      config2.prNumber
+    );
+    return;
+  }
+  const options = {
+    model: config2.model,
+    fallbackModels: config2.fallbackModels,
+    temperature: config2.temperature ?? 0.2,
+    maxTokens: config2.maxTokens ?? 2048,
+    enableSearchGrounding: config2.enableSearchGrounding !== false
+  };
+  const [diff, originalReview] = await Promise.all([
+    getPullRequestDiff(config2.repo, config2.prNumber, config2.githubToken, config2.baseBranch || "main").catch(() => null),
+    fetchPrReviewComment(config2.repo, config2.githubToken, config2.prNumber, commentTag).catch(() => null)
+  ]);
+  switch (command) {
+    case "explain":
+      await executeExplain(config2, providerManager, options, originalReview);
+      break;
+    case "fix":
+      await executeFix(config2, providerManager, options, diff, originalReview);
+      break;
+    case "review-full":
+      await executeOnDemandReview(config2, providerManager, options, diff, "full", commentTag);
+      break;
+    case "review-security":
+      await executeOnDemandReview(config2, providerManager, options, diff, "security", commentTag);
+      break;
+    case "review-performance":
+      await executeOnDemandReview(config2, providerManager, options, diff, "performance", commentTag);
+      break;
+    case "review-standard":
+      await executeOnDemandReview(config2, providerManager, options, diff, "standard", commentTag);
+      break;
+  }
+}
+
 // src/index.ts
 function getOptionalInput(name, envFallbacks) {
   const val = getInput(name);
@@ -41022,6 +41772,52 @@ async function run() {
     console.log(`- Repository: ${repo || "local"}`);
     console.log(`- PR Number: ${prNumber || "N/A (Push or non-PR context)"}`);
     console.log(`- Execution Mode: ${mode}`);
+    if (mode === "slash-command" || mode === "comment") {
+      const eventPath = process.env.GITHUB_EVENT_PATH;
+      let commentBody = "";
+      let commentId;
+      let commentAuthor;
+      if (eventPath && fs5.existsSync(eventPath)) {
+        try {
+          const eventData = JSON.parse(fs5.readFileSync(eventPath, "utf-8"));
+          commentBody = eventData.comment?.body || "";
+          commentId = eventData.comment?.id;
+          commentAuthor = eventData.comment?.user?.login;
+        } catch {
+          console.warn("\u26A0\uFE0F Could not parse GitHub event payload for slash command.");
+        }
+      }
+      if (!commentBody.trim()) {
+        console.log("\u2139\uFE0F  Slash command mode: no comment body found in event payload. Skipping.");
+        return;
+      }
+      const slashConfig = {
+        githubToken: token,
+        repo,
+        prNumber,
+        commentBody,
+        commentId,
+        commentAuthor,
+        commentTag: getOptionalInput("comment-tag", ["REVIEWGROUND_COMMENT_TAG", "COMMENT_TAG"]) || void 0,
+        provider: getOptionalInput("provider", ["REVIEWGROUND_PROVIDER", "PROVIDER", "LLM_PROVIDER"]) || void 0,
+        model: getOptionalInput("model", ["REVIEWGROUND_MODEL", "MODEL", "LLM_MODEL"]) || void 0,
+        geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY"]) || void 0,
+        openaiApiKey: getOptionalInput("openai-api-key", ["OPENAI_API_KEY", "OPENAI_KEY"]) || void 0,
+        anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_KEY", "CLAUDE_KEY"]) || void 0,
+        groqApiKey: getOptionalInput("groq-api-key", ["GROQ_API_KEY", "GROQ_KEY"]) || void 0,
+        deepseekApiKey: getOptionalInput("deepseek-api-key", ["DEEPSEEK_API_KEY", "DEEPSEEK_KEY"]) || void 0,
+        openrouterApiKey: getOptionalInput("openrouter-api-key", ["OPENROUTER_API_KEY", "OPENROUTER_KEY"]) || void 0,
+        llmBaseUrl: getOptionalInput("llm-base-url", ["LLM_BASE_URL", "OPENAI_BASE_URL", "OLLAMA_BASE_URL", "OLLAMA_HOST"]) || void 0,
+        llmApiKey: getOptionalInput("llm-api-key", ["LLM_API_KEY", "CUSTOM_API_KEY"]) || void 0,
+        baseBranch: getOptionalInput("base-branch", ["REVIEWGROUND_BASE_BRANCH", "BASE_BRANCH"]) || "main",
+        enableSearchGrounding: getBooleanInput("enable-search-grounding", ["ENABLE_SEARCH_GROUNDING"], true),
+        fallbackModels: getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]) ? getOptionalInput("fallback-models", ["REVIEWGROUND_FALLBACK_MODELS", "FALLBACK_MODELS"]).split(",").map((s) => s.trim()).filter(Boolean) : void 0
+      };
+      console.log("\n--- \u26A1 Processing Slash Command ---");
+      await handleSlashCommand(slashConfig);
+      console.log("\n\u2728 ReviewGround slash command completed.");
+      return;
+    }
     const baseConfig = {
       githubToken: token,
       repo,
@@ -41051,6 +41847,16 @@ async function run() {
         enableSearchGrounding: getBooleanInput("enable-search-grounding", ["ENABLE_SEARCH_GROUNDING"], true),
         enableInlineSuggestions: getBooleanInput("enable-inline-suggestions", ["ENABLE_INLINE_SUGGESTIONS"], true),
         enableNpmVerify: getBooleanInput("enable-npm-verify", ["ENABLE_NPM_VERIFY"], true),
+        // Feature 3: Multi-ecosystem registry grounding
+        enableMultiRegistryVerify: getBooleanInput("enable-multi-registry-verify", ["ENABLE_MULTI_REGISTRY_VERIFY"], true),
+        // Feature 4: Token & cost transparency footer
+        enableCostFooter: getBooleanInput("enable-cost-footer", ["ENABLE_COST_FOOTER"], true),
+        // Feature 5: Smart diff prioritization
+        enableSmartDiffPriority: getBooleanInput("enable-smart-diff-priority", ["ENABLE_SMART_DIFF_PRIORITY"], true),
+        // Feature 6: OWASP/CWE taxonomy tagging
+        enableOwaspTagging: getBooleanInput("enable-owasp-tagging", ["ENABLE_OWASP_TAGGING"], true),
+        // Feature 7: Missing test coverage detection
+        enableTestCoverageCheck: getBooleanInput("enable-test-coverage-check", ["ENABLE_TEST_COVERAGE_CHECK"], true),
         geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY"]) || void 0,
         openaiApiKey: getOptionalInput("openai-api-key", ["OPENAI_API_KEY", "OPENAI_KEY"]) || void 0,
         anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_KEY", "CLAUDE_KEY"]) || void 0,

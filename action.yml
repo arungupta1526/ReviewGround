@@ -1,5 +1,5 @@
 name: 'ReviewGround - AI Code Reviewer & CI Verification'
-description: 'Universal AI Code Reviewer with 7-provider BYOK, live npm grounding, 1-click suggestions, and sticky CI summaries.'
+description: 'Universal AI Code Reviewer with 7-provider BYOK, multi-ecosystem registry grounding, smart diff prioritization, OWASP/CWE tagging, interactive slash commands, and sticky CI summaries.'
 author: 'ReviewGround'
 branding:
   icon: 'shield'
@@ -12,7 +12,7 @@ inputs:
     default: '${{ github.token }}'
 
   mode:
-    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), or "all" (both, with smart CI table auto-skip when no stage inputs provided)'
+    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), "all" (both), or "slash-command" (handle @reviewground/@review PR comment commands via issue_comment event)'
     required: false
     default: 'all'
 
@@ -138,7 +138,7 @@ inputs:
     default: 'en'
 
   enable-pr-description-update:
-    description: 'Auto-update PR body with AI-generated summary, changed areas checklist, and risk badge (default false)'
+    description: 'Auto-update PR body with AI-generated summary, changed areas checklist, walkthrough table, and risk badge (default false)'
     required: false
     default: 'false'
 
@@ -146,6 +146,31 @@ inputs:
     description: 'Create a GitHub Check Run with pass/fail gate based on critical issues found (requires checks:write permission, default false)'
     required: false
     default: 'false'
+
+  enable-multi-registry-verify:
+    description: 'Verify package changes against live NPM, PyPI, Crates.io, and Go module proxy registries to eliminate version hallucinations (default true)'
+    required: false
+    default: 'true'
+
+  enable-cost-footer:
+    description: 'Add token usage and estimated cost transparency footer to sticky review comment (default true)'
+    required: false
+    default: 'true'
+
+  enable-smart-diff-priority:
+    description: 'For large PRs, prioritize security-critical files (auth, API, DB) before lower-priority files (assets, lockfiles, snapshots) to maximize token budget efficiency (default true)'
+    required: false
+    default: 'true'
+
+  enable-owasp-tagging:
+    description: 'Instruct AI to tag all security findings with OWASP Top 10 category and CWE taxonomy IDs (default true)'
+    required: false
+    default: 'true'
+
+  enable-test-coverage-check:
+    description: 'Detect new exported functions/endpoints added without corresponding test files and suggest test stubs (default true)'
+    required: false
+    default: 'true'
 
 outputs:
   reviewed:

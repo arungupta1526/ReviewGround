@@ -1,13 +1,17 @@
 /**
  * ReviewGround - Universal AI Code Reviewer & Security Advisor
  * Analyzes Git diffs using Multi-Provider BYOK (Gemini, OpenAI, Anthropic, Groq, DeepSeek, Custom)
- * with live NPM registry search grounding, 1-click inline commit suggestions, and sticky comments.
+ * with multi-ecosystem registry grounding, smart diff prioritization, 1-click inline commit
+ * suggestions, OWASP/CWE taxonomy tagging, token cost transparency, and sticky comments.
  */
 
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import { z } from 'zod';
 import { ProviderManager, ProviderResponse, ReviewOptions } from './providers/index.js';
+import { verifyPackagesMultiRegistry } from './packageRegistry.js';
+import { packPrioritizedDiff } from './diffPrioritizer.js';
+import { analyzeTestCoverage } from './testCoverageDetector.js';
 
 /**
  * Truncates a git diff at a clean hunk boundary (on a `diff --git` line)
@@ -52,6 +56,16 @@ export interface ReviewerConfig {
   enableNpmVerify?: boolean;
   enablePrDescriptionUpdate?: boolean;
   enableCheckRun?: boolean;
+  /** Feature 1 & 3: Multi-registry grounding (npm + pypi + crates + go) */
+  enableMultiRegistryVerify?: boolean;
+  /** Feature 4: Token & cost transparency footer in sticky comment */
+  enableCostFooter?: boolean;
+  /** Feature 5: Smart diff prioritization for large PRs */
+  enableSmartDiffPriority?: boolean;
+  /** Feature 6: OWASP Top 10 / CWE taxonomy tagging */
+  enableOwaspTagging?: boolean;
+  /** Feature 7: Missing unit test detection & stub suggestions */
+  enableTestCoverageCheck?: boolean;
   commentTag?: string;
   geminiApiKey?: string;
   openaiApiKey?: string;
@@ -67,68 +81,12 @@ export const DEFAULT_COMMENT_TAG = '<!-- reviewground-code-review -->';
 export const CI_SECTION_HEADER = '### 🚦 CI Pipeline Results & Verification';
 
 /**
- * Proactively verifies added/changed npm packages in diff against live npm registry
- * to eliminate LLM version hallucinations (e.g. Node 24, Zod 4, TypeScript 7).
+ * @deprecated Use verifyPackagesMultiRegistry from packageRegistry.ts instead.
+ * Kept for backward compatibility with existing tests.
  */
 export async function verifyPackagesInDiff(diffText: string): Promise<string[]> {
-  const verified: string[] = [];
-  const lines = diffText.split('\n');
-  const addedDeps: Array<{ name: string; version: string }> = [];
-
-  for (const line of lines) {
-    if (!line.startsWith('+')) continue;
-    const match = line.match(/^\+\s*"(@?[a-z0-9_./-]+)"\s*:\s*"[\^~>=<]*([0-9]+(?:\.[0-9]+)*[^"]*)"/);
-    if (match) {
-      const name = match[1];
-      const version = match[2];
-      const ignore = [
-        'name',
-        'version',
-        'description',
-        'scripts',
-        'bin',
-        'main',
-        'types',
-        'engines',
-        'node',
-        'npm',
-      ];
-      if (!ignore.includes(name)) {
-        addedDeps.push({ name, version });
-      }
-    }
-  }
-
-  if (addedDeps.length === 0) return verified;
-
-  await Promise.all(
-    addedDeps.map(async (dep) => {
-      try {
-        const res = await fetch(
-          `https://registry.npmjs.org/${encodeURIComponent(dep.name)}/${encodeURIComponent(dep.version)}`,
-          { signal: AbortSignal.timeout(3000) }
-        );
-        if (res.ok) {
-          verified.push(`${dep.name}@${dep.version}`);
-          return;
-        }
-        const latestRes = await fetch(
-          `https://registry.npmjs.org/${encodeURIComponent(dep.name)}/latest`,
-          { signal: AbortSignal.timeout(3000) }
-        );
-        if (latestRes.ok) {
-          const info = (await latestRes.json()) as { version?: string };
-          if (info.version) {
-            verified.push(`${dep.name} (latest on registry: ${info.version})`);
-          }
-        }
-      } catch {
-        // Ignore timeout or network failure
-      }
-    })
-  );
-
-  return verified;
+  const result = await verifyPackagesMultiRegistry(diffText);
+  return result.notes;
 }
 
 /**
@@ -435,19 +393,30 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     }
   }
 
-  // Verify packages in diff if npm check is enabled
+  // Feature 3: Multi-Ecosystem Registry Grounding (npm + PyPI + Crates.io + Go proxy)
   let packageGroundTruthNote = '';
-  if (config.enableNpmVerify !== false) {
-    const verifiedPackages = await verifyPackagesInDiff(diff);
-    if (verifiedPackages.length > 0) {
-      packageGroundTruthNote = `\nVerified Real-Time NPM Registry Releases:\n${verifiedPackages.map((p) => `- ${p} is confirmed published on npm`).join('\n')}\n(IMPORTANT: Do NOT claim that these verified packages or versions are invalid or non-existent!)\n`;
+  if (config.enableNpmVerify !== false || config.enableMultiRegistryVerify !== false) {
+    const registryResult = await verifyPackagesMultiRegistry(diff);
+    if (registryResult.totalVerified > 0) {
+      const ecoLabel = registryResult.ecosystems.length > 0 ? registryResult.ecosystems.join(', ').toUpperCase() : 'Registry';
+      packageGroundTruthNote = `\nVerified Real-Time ${ecoLabel} Registry Releases:\n${registryResult.notes.map((n) => `- ${n}`).join('\n')}\n(IMPORTANT: Do NOT claim that these verified packages or versions are invalid or non-existent!)\n`;
     }
   }
 
-  // Truncate massive diffs at a clean hunk boundary to avoid sending malformed diffs to LLMs
-  const truncatedDiff = truncateDiffClean(diff);
-  if (diff.length > 32000) {
-    console.log(`⚠️ Large diff detected (${diff.length} chars) — truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
+  // Feature 5: Smart Diff Prioritization for large PRs (>28000 chars)
+  let truncatedDiff: string;
+  if (config.enableSmartDiffPriority !== false && diff.length > 28000) {
+    const priorityResult = packPrioritizedDiff(diff, 28000);
+    truncatedDiff = priorityResult.packedDiff;
+    console.log(priorityResult.priorityLog);
+    if (priorityResult.skippedFiles.length > 0) {
+      console.log(`🗂️ Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(', ')}${priorityResult.skippedFiles.length > 10 ? '...' : ''}`);
+    }
+  } else {
+    truncatedDiff = truncateDiffClean(diff);
+    if (diff.length > 32000) {
+      console.log(`⚠️ Large diff detected (${diff.length} chars) — truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
+    }
   }
   console.log(`🤖 Analyzing code diff (${truncatedDiff.length} characters)...`);
 
@@ -479,6 +448,11 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     }
   }
 
+  // Feature 6: OWASP Top 10 & CWE Taxonomy injection
+  const owaspInstruction = config.enableOwaspTagging !== false
+    ? `\nSecurity Taxonomy Requirement: When flagging any security issue, you MUST include the relevant OWASP Top 10 category and CWE ID. Use this format:\n- ❌ **CWE-89: SQL Injection** (OWASP A03:2021 — Injection)\n- ⚠️ **CWE-79: Cross-Site Scripting (XSS)** (OWASP A03:2021)\n- 🔒 **CWE-798: Hardcoded Credentials** (OWASP A07:2021 — Identification and Authentication Failures)\n- 🔑 **CWE-284: Improper Access Control** (OWASP A01:2021)\n- 🌐 **CWE-918: SSRF** (OWASP A10:2021 — Server-Side Request Forgery)\nAlways cite the exact CWE-ID and OWASP category when security issues are found.\n`
+    : '';
+
   // F6: Multi-language output instruction
   const lang = (config.reviewLanguage || 'en').toLowerCase().trim();
   const languageInstruction =
@@ -496,7 +470,7 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
 You are a Principal Software Engineer &amp; DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions:
@@ -517,7 +491,7 @@ Task: Analyze the git diff below and produce a structured code review.
 
 Review focus:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 Response format:
 - Start with a brief executive summary (1-2 sentences).
 - Use markdown sections (## Bugs, ## Security, ## Performance, etc.) as appropriate for this review level.
@@ -547,10 +521,11 @@ Analyze the following git diff.
 
 ## Review Focus
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 ## Instructions
 - If the code is clean, say: "✅ All changes look clean, performant, and secure!" followed by 2 bullet points.
 - Otherwise, list findings grouped under ### headers (Bugs, Security, Performance, etc.).
+- When flagging security issues, always include the OWASP category and CWE ID.
 - For specific line fixes, append at the very end:
 
 \`\`\`inline_suggestions
@@ -567,7 +542,7 @@ ${truncatedDiff}
     prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 Analyze the following git diff for:
 ${focusInstructions}
-${packageGroundTruthNote}${customGuidelines}${languageInstruction}
+${packageGroundTruthNote}${customGuidelines}${owaspInstruction}${languageInstruction}
 If the code looks solid and has no issues at this review level, respond with "✅ All changes look clean, performant, and secure!" and a brief 2-bullet summary.
 
 If you propose specific line-level code replacements on files in the diff, provide your human-readable review first. Then, at the very end of your response, provide an optional JSON block tagged with \`\`\`inline_suggestions so GitHub can render interactive 1-click commit suggestion buttons:
@@ -648,16 +623,47 @@ ${truncatedDiff}
     }
   }
 
+  // Feature 7: Missing unit test detection
+  let testCoverageSection = '';
+  if (config.enableTestCoverageCheck !== false) {
+    const coverageReport = analyzeTestCoverage(diff);
+    if (coverageReport.warnings.length > 0) {
+      testCoverageSection = `\n\n### 🧪 Test Coverage\n\n${coverageReport.warnings.join('\n')}\n${coverageReport.suggestedTests}`;
+      console.log(`⚠️ [TestCheck] ${coverageReport.warnings[0]}`);
+    }
+  }
+
   const groundingBadge = response.searchGroundingUsed ? ' 🌐 *Live Search Grounded*' : '';
   const engineString = `${response.provider} (${response.model})${groundingBadge}`;
+
+  // Feature 4: Token & cost transparency footer
+  let costFooter = '';
+  if (config.enableCostFooter !== false) {
+    const inputTokensEst = Math.ceil(truncatedDiff.length / 4);
+    const outputTokensEst = Math.ceil(response.text.length / 4);
+    const totalTokens = inputTokensEst + outputTokensEst;
+    // Rough cost estimates per 1M tokens (blended)
+    const costPerMToken: Record<string, number> = {
+      gemini: 0.10,
+      openai: 0.15,
+      anthropic: 0.80,
+      groq: 0.06,
+      deepseek: 0.14,
+      openrouter: 0.10,
+      custom: 0.00,
+    };
+    const providerKey = response.provider.toLowerCase().split(' ')[0] ?? 'custom';
+    const costPerM = costPerMToken[providerKey] ?? 0.15;
+    const estimatedCostUsd = ((totalTokens / 1_000_000) * costPerM);
+    const latencyMs = response.latencyMs ?? 0;
+    const latencyStr = latencyMs > 0 ? `${(latencyMs / 1000).toFixed(1)}s` : '—';
+    costFooter = `\n\n> ⚡ **ReviewGround** | Model: \`${response.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} | Latency: ${latencyStr}  \n> *Saved ~$20–50/mo vs proprietary AI review bots*`;
+  }
 
   const markdownOutput = `## 🛡️ ReviewGround AI Code Review & Security Analysis
 *Reviewer Engine: ${engineString}*
 
-${cleanReviewText}
-
----
-*Generated automatically by [ReviewGround](https://github.com/arungupta1526/ReviewGround) (${engineString}).*
+${cleanReviewText}${testCoverageSection}\n\n---\n*Generated automatically by [ReviewGround](https://github.com/arungupta1526/ReviewGround) (${engineString}).*${costFooter}
 `;
 
   // 1. Output to CI Console

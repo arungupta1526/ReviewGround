@@ -13,7 +13,7 @@
 [![Security: 0 Vulnerabilities](https://img.shields.io/badge/Security-0%20Vulnerabilities-success.svg)](package.json)
 
 *Stop paying $50/seat/month for proprietary AI code review bots.*  
-**ReviewGround** brings enterprise-grade AI code review, live package registry grounding, 1-click commit suggestions, and sticky CI summaries directly to your repository with your own API keys.
+**ReviewGround** brings enterprise-grade AI code review, multi-ecosystem registry grounding, interactive PR slash commands, OWASP/CWE security taxonomy tagging, 1-click commit suggestions, and sticky CI summaries directly to your repository with your own API keys.
 
 <br/>
 
@@ -51,8 +51,13 @@
 | **Model Customization** | Fixed models only | **Full Custom Model Override (`model: '...'`)** |
 | **Multi-Host Safety** | Hijacks open models to hardcoded hosts | **Preserves Custom & OpenRouter host selections (Qwen, Llama)** |
 | **Zero-Commit Control** | Must edit YAML & commit for model changes | **Change Provider/Model via GitHub Repo Variables** |
-| **Hallucination Prevention** | None (flags modern packages as non-existent) | **Real-Time NPM Registry Search Grounding** |
+| **Package Hallucinations** | None (flags modern packages as non-existent) | **Multi-Ecosystem Live Registry Grounding (NPM + PyPI + Crates + Go)** |
 | **Commit Suggestions** | Markdown text diff blocks | **Native GitHub 1-Click `[ Apply suggestion ]` Buttons** |
+| **Interactive PR Commands** | Not supported | **`@reviewground explain/fix`, `/review security` Slash Commands** |
+| **Security Taxonomy** | Generic "could be vulnerable" | **OWASP Top 10 + CWE-ID Tagged Findings** |
+| **Large PR Handling** | Truncates randomly | **Priority-Based Diff Packing (P0: Auth/API/DB first)** |
+| **Test Coverage** | Not supported | **Auto-detects uncovered exports + suggests test stubs** |
+| **Cost Transparency** | Hidden / opaque | **Token count & estimated cost footer per review** |
 | **PR Comment Noise** | Spams 5–10 new comments per PR push | **Single In-Place Sticky Comment (Updated via PATCH)** |
 | **CI Duration Tracking** | Not supported | **Workflow Jobs API Duration Metrics (`9s`, `1m 24s`)** |
 | **Local / Air-Gapped AI** | Not supported | **Self-hosted Ollama / Together AI / vLLM compatible** |
@@ -583,6 +588,11 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Search Grounding** | `enable-search-grounding`| `ENABLE_SEARCH_GROUNDING` | `true` |
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |
+| **Multi-Registry Verify** | `enable-multi-registry-verify` | `ENABLE_MULTI_REGISTRY_VERIFY` | `true` — also verifies PyPI, Crates.io & Go module proxy |
+| **Cost Footer** | `enable-cost-footer` | `ENABLE_COST_FOOTER` | `true` — shows token count + estimated cost in sticky comment |
+| **Smart Diff Priority** | `enable-smart-diff-priority` | `ENABLE_SMART_DIFF_PRIORITY` | `true` — P0 (auth/API/DB), P1 (standard), P2 (assets/locks) |
+| **OWASP Tagging** | `enable-owasp-tagging` | `ENABLE_OWASP_TAGGING` | `true` — tags security findings with CWE-ID & OWASP category |
+| **Test Coverage Check** | `enable-test-coverage-check` | `ENABLE_TEST_COVERAGE_CHECK` | `true` — warns when new exports lack unit tests + suggests stubs |
 | **Base Branch** | `base-branch` | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH` | `main` |
 | **LLM Temperature** | `temperature` | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE` | `0.2` |
 | **Max Tokens** | `max-tokens` | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS` | `2048` |
@@ -594,6 +604,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Extra CI Stages** | `extra-stages` | `REVIEWGROUND_EXTRA_STAGES`, `EXTRA_STAGES` | — JSON array e.g. `[{"name":"Deploy","result":"success"}]` |
 | **Comment Tag** | `comment-tag` | `REVIEWGROUND_COMMENT_TAG`, `COMMENT_TAG` | `<!-- reviewground-code-review -->` |
 
+
 ### Action Outputs
 
 | Output | Description |
@@ -602,6 +613,129 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | `reviewer-engine` | The provider and model that generated the review (e.g. `Google Gemini (gemini-3.5-flash-lite)`) |
 | `summarized` | `"true"` if the CI pipeline summary was rendered |
 | `summary-markdown`| The rendered markdown table of the CI summary and stage durations |
+
+---
+
+## ⚡ v1.3.0 — Competitive Feature Suite
+
+### 💬 Feature 1: Interactive PR Slash Commands (`issue_comment` trigger)
+
+Add a separate workflow step to handle `@reviewground` commands and `/review` slash commands posted by developers in PR comments:
+
+```yaml
+# .github/workflows/reviewground-slash.yml
+name: ReviewGround Slash Commands
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  slash-command:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request != null  # Only handle PR comments
+    steps:
+      - uses: arungupta1526/ReviewGround@v1
+        with:
+          mode: 'slash-command'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}  # or any other provider
+```
+
+**Supported commands** (post in any PR comment):
+
+| Command | Description |
+|---|---|
+| `@reviewground explain` | AI explains why flagged issues were raised, with context |
+| `@reviewground fix` | AI suggests a concrete code patch for detected issues |
+| `/review full` | Triggers a full comprehensive re-review (all levels) |
+| `/review security` | Security-focused re-review (OWASP only) |
+| `/review performance` | Performance-focused re-review |
+| `/review` or `/review standard` | Standard re-review |
+
+---
+
+### 🌐 Feature 3: Multi-Ecosystem Registry Grounding
+
+ReviewGround now auto-detects and verifies packages across all major ecosystems:
+
+| Ecosystem | File Detected | Registry API |
+|---|---|---|
+| **JavaScript/Node** | `package.json` | `registry.npmjs.org` |
+| **Python** | `requirements.txt`, `pyproject.toml` | `pypi.org/pypi/{pkg}/json` |
+| **Rust** | `Cargo.toml` | `crates.io/api/v1/crates/{pkg}` |
+| **Go** | `go.mod` | `proxy.golang.org` |
+
+Enable/disable: `enable-multi-registry-verify: 'true'` (default on).
+
+---
+
+### 🪙 Feature 4: Token & Cost Transparency Footer
+
+Every sticky review comment now includes a transparency stat bar at the bottom:
+
+```
+⚡ ReviewGround | Model: `gemini-3.5-flash-lite` | Est. Tokens: 1,840 | Est. Cost: ~$0.0002 | Latency: 1.2s
+Saved ~$20–50/mo vs proprietary AI review bots
+```
+
+Enable/disable: `enable-cost-footer: 'true'` (default on).
+
+---
+
+### 🎯 Feature 5: Smart Diff Prioritization for Large PRs
+
+For PRs >28,000 characters, ReviewGround prioritizes files based on security impact:
+
+| Tier | Files | Behavior |
+|---|---|---|
+| **P0 (Critical)** | `auth/`, `api/`, `db/`, `payments/`, `*.sql`, middleware, config | Always reviewed first |
+| **P1 (Standard)** | Regular application code | Reviewed if budget allows |
+| **P2 (Skip first)** | `package-lock.json`, `*.snap`, `dist/`, SVG/images, vendor | Skipped first when budget tight |
+
+Enable/disable: `enable-smart-diff-priority: 'true'` (default on).
+
+---
+
+### 🏷️ Feature 6: OWASP Top 10 & CWE Taxonomy Tagging
+
+When security issues are flagged, ReviewGround now instructs the AI to include standard vulnerability IDs:
+
+- ❌ **CWE-89: SQL Injection** (OWASP A03:2021 — Injection)
+- ⚠️ **CWE-79: Cross-Site Scripting (XSS)** (OWASP A03:2021)
+- 🔒 **CWE-798: Hardcoded Credentials** (OWASP A07:2021)
+- 🌐 **CWE-918: SSRF** (OWASP A10:2021)
+
+Enable/disable: `enable-owasp-tagging: 'true'` (default on).
+
+---
+
+### 🧪 Feature 7: Missing Unit Test Warning & Auto-Test Stubs
+
+ReviewGround detects new exported functions, classes, and HTTP endpoints added in a PR without corresponding test files being updated:
+
+```
+⚠️ 2 new exported functions detected without corresponding unit tests: `generateToken`, `validateSession`
+
+<details>
+<summary>🧪 Click to view suggested unit test stubs</summary>
+
+```typescript
+// src/auth/jwt.ts → generateToken
+it('generateToken — should work correctly', () => {
+  const result = generateToken();
+  expect(result).toBeDefined();
+});
+```
+
+</details>
+```
+
+Supported languages: **TypeScript, JavaScript, Python, Go**.  
+Enable/disable: `enable-test-coverage-check: 'true'` (default on).
 
 ---
 

@@ -148,9 +148,11 @@ export class ProviderManager {
     for (const provider of chain) {
       try {
         console.log(`🤖 [ReviewGround] Attempting review with ${provider.name}...`);
+        const startMs = Date.now();
         const response = await provider.review(prompt, options);
         if (response && response.text.trim().length > 0) {
-          console.log(`✅ [ReviewGround] Successfully generated review via ${provider.name} (${response.model}).`);
+          response.latencyMs = Date.now() - startMs;
+          console.log(`✅ [ReviewGround] Successfully generated review via ${provider.name} (${response.model}) in ${response.latencyMs}ms.`);
           return response;
         }
       } catch (err: unknown) {
