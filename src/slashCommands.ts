@@ -11,7 +11,13 @@
  *   /review performance     — Performance-focused re-review
  */
 
-import { postOrUpdatePrComment, getPullRequestDiff, DEFAULT_COMMENT_TAG } from './reviewer.js';
+import {
+  postOrUpdatePrComment,
+  getPullRequestDiff,
+  DEFAULT_COMMENT_TAG,
+  fetchPrReviewComment,
+  postDirectComment,
+} from './github/index.js';
 import { ProviderManager, ReviewOptions } from './providers/index.js';
 
 export interface SlashCommandConfig {
@@ -22,7 +28,6 @@ export interface SlashCommandConfig {
   commentId?: number;
   commentAuthor?: string;
   commentTag?: string;
-  // Provider config
   provider?: string;
   model?: string;
   temperature?: number;
@@ -61,65 +66,9 @@ export function parseSlashCommand(commentBody: string): SlashCommandType {
   if (/\/review\s+security/i.test(text)) return 'review-security';
   if (/\/review\s+performance/i.test(text)) return 'review-performance';
   if (/\/review\s+standard/i.test(text)) return 'review-standard';
-  if (/\/review\b/i.test(text)) return 'review-standard'; // bare /review → standard
+  if (/\/review\b/i.test(text)) return 'review-standard';
 
   return null;
-}
-
-// ──────────────────────────────────────────────
-// GitHub API helpers
-// ──────────────────────────────────────────────
-
-async function fetchPrReviewComment(
-  repo: string,
-  token: string,
-  prNumber: string,
-  commentTag: string
-): Promise<string | null> {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'ReviewGround-SlashCommand',
-  };
-
-  let page = 1;
-  while (true) {
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
-      { headers }
-    );
-    if (!res.ok) break;
-    const comments = (await res.json()) as Array<{ id: number; body?: string }>;
-    if (comments.length === 0) break;
-    const found = comments.find((c) => c.body?.includes(commentTag));
-    if (found) return found.body ?? null;
-    if (comments.length < 100) break;
-    page++;
-  }
-  return null;
-}
-
-async function postDirectComment(
-  body: string,
-  repo: string,
-  token: string,
-  prNumber: string
-): Promise<void> {
-  const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'ReviewGround-SlashCommand',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ body }),
-  });
-  if (res.ok) {
-    console.log(`✅ [SlashCmd] Posted response comment on PR #${prNumber}`);
-  } else {
-    console.warn(`⚠️ [SlashCmd] Failed to post response: HTTP ${res.status}`);
-  }
 }
 
 // ──────────────────────────────────────────────
@@ -173,30 +122,25 @@ async function executeFix(
   diff: string | null,
   originalReview: string | null
 ): Promise<void> {
-  const diffContext = diff ? diff.slice(0, 8000) : 'No diff available.';
-  const reviewContext = originalReview
-    ? `Previous review findings:\n${originalReview.slice(0, 2000)}`
+  const context = originalReview
+    ? `Previous review comments:\n${originalReview.slice(0, 2000)}`
     : '';
+  const diffContext = diff ? `Git Diff:\n\`\`\`diff\n${diff.slice(0, 8000)}\n\`\`\`` : '';
 
-  const prompt = `You are a Principal Software Engineer.
+  const prompt = `You are a Principal Software Engineer. A developer has asked: "@reviewground fix"
 
-A developer has asked: "@reviewground fix"
+They want an alternative, ready-to-use code fix for the issues flagged in this PR.
 
-They want concrete code fix suggestions for the issues you found.
+${context}
 
-${reviewContext}
-
-Git diff context:
-\`\`\`diff
 ${diffContext}
-\`\`\`
 
 Provide:
-1. Specific, copy-paste ready code fixes for the most critical issue(s).
-2. Brief explanation of WHY this fix is correct.
-3. If multiple fixes needed, address them in order of severity.
+1. A concise explanation of the suggested fix.
+2. Complete, copy-pasteable code replacement blocks.
+3. Why this fix resolves the issue without introducing new regressions.
 
-Format each fix as a fenced code block with the language identifier.`;
+Format all code with appropriate markdown fences.`;
 
   const response = await providerManager.executeReview(prompt, options);
   if (!response) {
@@ -223,7 +167,7 @@ async function executeOnDemandReview(
 ): Promise<void> {
   if (!diff || diff.trim().length === 0) {
     await postDirectComment(
-      `> 🤖 **ReviewGround** — Could not fetch PR diff to perform on-demand review. Please ensure the \`GITHUB_TOKEN\` has \`contents: read\` permission.`,
+      `> 🤖 **ReviewGround** — Could not fetch PR diff to run on-demand review.`,
       config.repo,
       config.githubToken,
       config.prNumber
@@ -232,10 +176,13 @@ async function executeOnDemandReview(
   }
 
   const focusMap: Record<string, string> = {
-    full: '1. Critical bugs, edge-cases, and memory leaks.\n2. Security risks (OWASP Top 10, secret leaks, injection, XSS).\n3. Performance bottlenecks.\n4. Code style, readability, naming, and documentation gaps.\n5. Test coverage gaps.',
-    security: '1. Security risks ONLY: OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization, hardcoded credentials, privilege escalation, and missing authentication/authorization.',
-    performance: '1. Performance bottlenecks ONLY: N+1 queries, unbounded loops, missing cache, large allocations, synchronous blocking in async contexts, unindexed DB searches, and unoptimized algorithms.',
-    standard: '1. Critical bugs and edge-case regressions.\n2. Security risks (OWASP Top 10, secret leaks, injection).\n3. Performance bottlenecks.',
+    full: 'Comprehensive review: critical bugs, security vulnerabilities (OWASP/CWE), performance bottlenecks, code architecture, test coverage, and naming conventions.',
+    security:
+      'Security-only review: OWASP Top 10, CWE IDs, injection vulnerabilities, SSRF, secret leaks, broken auth, input validation gaps, and dependency risks.',
+    performance:
+      'Performance-only review: algorithmic complexity, N+1 queries, memory leaks, unindexed operations, unbounded collections, and missing cleanup.',
+    standard:
+      'Standard review: critical bugs, regression risks, edge-case exceptions, and OWASP security issues.',
   };
 
   const focus = focusMap[reviewLevel] ?? focusMap.standard;
@@ -268,7 +215,6 @@ ${diff.slice(0, 28000)}
   const header = `## 🛡️ ReviewGround — ${label} Review\n*Triggered by \`/review ${reviewLevel}\` slash command · ${response.provider} (${response.model})*`;
   const body = `${header}\n\n${response.text}\n\n---\n*Powered by [ReviewGround](https://github.com/arungupta1526/ReviewGround)*`;
 
-  // Update the sticky comment for /review commands
   await postOrUpdatePrComment(body, config.githubToken, config.repo, config.prNumber, commandTag);
 }
 
@@ -278,7 +224,6 @@ ${diff.slice(0, 28000)}
 
 /**
  * Handles an incoming slash command from a PR issue_comment event.
- * Dispatches to the appropriate AI action and posts a response comment.
  */
 export async function handleSlashCommand(config: SlashCommandConfig): Promise<void> {
   const command = parseSlashCommand(config.commentBody);
@@ -322,7 +267,6 @@ export async function handleSlashCommand(config: SlashCommandConfig): Promise<vo
     enableSearchGrounding: config.enableSearchGrounding !== false,
   };
 
-  // Fetch shared context
   const [diff, originalReview] = await Promise.all([
     getPullRequestDiff(config.repo, config.prNumber, config.githubToken, config.baseBranch || 'main').catch(() => null),
     fetchPrReviewComment(config.repo, config.githubToken, config.prNumber, commentTag).catch(() => null),

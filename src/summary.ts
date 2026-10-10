@@ -6,7 +6,26 @@
  */
 
 import * as fs from 'fs';
-import { DEFAULT_COMMENT_TAG, CI_SECTION_HEADER } from './reviewer.js';
+import {
+  DEFAULT_COMMENT_TAG,
+  CI_SECTION_HEADER,
+  DiscoveredCiJob,
+  StageDurations,
+  formatDuration,
+  fetchWorkflowRunJobs,
+  fetchStageDurations,
+  updateOrCreateStickyComment,
+} from './github/index.js';
+
+// Re-export types and helpers for backward compatibility
+export {
+  DiscoveredCiJob,
+  StageDurations,
+  formatDuration,
+  fetchWorkflowRunJobs,
+  fetchStageDurations,
+  updateOrCreateStickyComment,
+};
 
 export interface SummaryConfig {
   githubToken?: string;
@@ -18,16 +37,8 @@ export interface SummaryConfig {
   buildResult?: string;
   testResult?: string;
   commentTag?: string;
-  /** Optional extra CI stages beyond the default 4.
-   * JSON string: [{"name":"Deploy","result":"success"},{"name":"E2E","result":"failure"}]
-   */
   extraStages?: string;
-  /** Execution mode ('review' | 'summary' | 'all') */
   mode?: string;
-}
-
-export interface StageDurations {
-  [stageKey: string]: string | undefined;
 }
 
 export function getStatusBadge(result?: string): { icon: string; text: string } {
@@ -49,27 +60,8 @@ export function getStatusBadge(result?: string): { icon: string; text: string } 
   }
 }
 
-export function formatDuration(ms: number): string {
-  if (ms <= 0) return '—';
-  const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
-}
-
-export interface DiscoveredCiJob {
-  id: number;
-  name: string;
-  status: string;
-  conclusion: string;
-  duration: string;
-  url?: string;
-}
-
 /**
  * Determines whether any CI verification stage inputs or workflow jobs exist.
- * Used for smart auto-skipping empty "unknown" CI tables when ReviewGround runs in 'all' mode.
  */
 export function hasCiData(
   gitleaks?: string,
@@ -89,151 +81,6 @@ export function hasCiData(
   );
   const hasJobDurations = Object.keys(durations).length > 0;
   return hasInputs || hasJobDurations || discoveredJobsCount > 0;
-}
-
-/**
- * Queries GitHub Actions Workflow Jobs API to discover all external jobs
- * in the current workflow run. Excludes ReviewGround's own review job.
- */
-export async function fetchWorkflowRunJobs(
-  repo?: string,
-  runId?: string,
-  token?: string
-): Promise<DiscoveredCiJob[]> {
-  if (!repo || !runId || !token) return [];
-
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'ReviewGround-CI-Summary',
-        },
-        signal: AbortSignal.timeout(15000),
-      }
-    );
-
-    if (!res.ok) {
-      console.warn(`ℹ️ Could not fetch workflow run jobs: HTTP ${res.status}`);
-      return [];
-    }
-
-    const data = (await res.json()) as {
-      jobs?: Array<{
-        id: number;
-        name: string;
-        status?: string;
-        conclusion?: string | null;
-        started_at?: string;
-        completed_at?: string;
-        html_url?: string;
-      }>;
-    };
-
-    if (!Array.isArray(data.jobs)) return [];
-
-    return data.jobs
-      .filter((job) => {
-        const lowerName = (job.name || '').toLowerCase();
-        return !lowerName.includes('reviewground');
-      })
-      .map((job) => {
-        let duration = '—';
-        if (job.started_at && job.completed_at) {
-          const ms = new Date(job.completed_at).getTime() - new Date(job.started_at).getTime();
-          duration = formatDuration(ms);
-        } else if (job.started_at) {
-          duration = 'In Progress';
-        }
-
-        const conclusion =
-          job.conclusion ||
-          (job.status === 'in_progress' ? 'in_progress' : job.status || 'unknown');
-
-        return {
-          id: job.id,
-          name: job.name,
-          status: job.status || 'unknown',
-          conclusion,
-          duration,
-          url: job.html_url,
-        };
-      });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`ℹ️ Could not fetch workflow run jobs: ${msg}`);
-    return [];
-  }
-}
-
-/**
- * Queries GitHub Actions Workflow Jobs API to compute human-readable duration metrics
- * for every CI stage.
- */
-export async function fetchStageDurations(
-  repo?: string,
-  runId?: string,
-  token?: string
-): Promise<StageDurations> {
-  const durations: StageDurations = {};
-  if (!repo || !runId || !token) return durations;
-
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'ReviewGround-CI-Summary',
-        },
-        signal: AbortSignal.timeout(15000),
-      }
-    );
-
-    if (!res.ok) {
-      console.warn(`ℹ️ Could not fetch workflow run jobs for durations: HTTP ${res.status}`);
-      return durations;
-    }
-
-    const data = (await res.json()) as {
-      jobs?: Array<{
-        name: string;
-        started_at?: string;
-        completed_at?: string;
-      }>;
-    };
-
-    if (Array.isArray(data.jobs)) {
-      for (const job of data.jobs) {
-        if (!job.started_at || !job.completed_at) continue;
-        const ms = new Date(job.completed_at).getTime() - new Date(job.started_at).getTime();
-        const formatted = formatDuration(ms);
-        const name = (job.name || '').toLowerCase();
-
-        if (name.includes('gitleaks') && !durations.gitleaks) {
-          durations.gitleaks = formatted;
-        } else if (name.includes('audit') && !durations.audit) {
-          durations.audit = formatted;
-        } else if ((name.includes('build') || name.includes('compil')) && !durations.build) {
-          durations.build = formatted;
-        } else if (
-          (name.includes('test') || name.includes('unit')) &&
-          !durations.test &&
-          !name.includes('build')
-        ) {
-          durations.test = formatted;
-        }
-      }
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`ℹ️ Could not fetch stage durations: ${msg}`);
-  }
-
-  return durations;
 }
 
 export function buildCiSummaryMarkdown(
@@ -289,7 +136,6 @@ export function buildCiSummaryMarkdown(
     verdict = `⚠️ **CI finished with status: Gitleaks (${gitleaks}), Audit (${audit}), Build (${build}), Tests (${test}).** ${runLinkText}`;
   }
 
-  // Parse optional extra stages from JSON string
   interface ExtraStage { name: string; result: string; }
   let extraRows = '';
   if (extraStagesJson) {
@@ -320,10 +166,6 @@ export function buildCiSummaryMarkdown(
 ${verdict}`;
 }
 
-/**
- * Renders a fully dynamic CI summary table discovering all workflow jobs
- * from the GitHub Actions API without hardcoding 4 fixed stages.
- */
 export function buildDynamicCiSummaryMarkdown(
   jobs: DiscoveredCiJob[],
   runId?: string,
@@ -355,7 +197,6 @@ export function buildDynamicCiSummaryMarkdown(
     rows += `\n| 🧪 **${idx + 1}. ${job.name}** | ${badge.icon} ${badge.text} | ${dur} | ${logLink} |`;
   });
 
-  // Extra stages
   if (extraStagesJson) {
     try {
       const parsed = JSON.parse(extraStagesJson) as Array<{ name: string; result: string }>;
@@ -393,102 +234,6 @@ export function buildDynamicCiSummaryMarkdown(
 ${verdict}`;
 }
 
-export async function updateOrCreateStickyComment(
-  ciSummaryMarkdown: string,
-  token?: string,
-  repo?: string,
-  prNumber?: string,
-  commentTag = DEFAULT_COMMENT_TAG
-): Promise<void> {
-  if (!token || !prNumber || !repo) {
-    console.log('ℹ️  Skipping PR comment update: Missing GITHUB_TOKEN, PR_NUMBER, or REPO_FULL_NAME.');
-    return;
-  }
-
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'ReviewGround-CI-Summary',
-  };
-
-  try {
-    // Paginate through all comment pages to find the sticky comment (handles PRs with >100 comments)
-    let existing: { id: number; body?: string } | undefined;
-    let page = 1;
-    while (!existing) {
-      const listRes = await fetch(
-        `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
-        { headers }
-      );
-      if (!listRes.ok) {
-        console.warn(`⚠️ Could not list comments for PR #${prNumber}: HTTP ${listRes.status}`);
-        break;
-      }
-      const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
-      if (comments.length === 0) break;
-      existing = comments.find((c) => c.body?.includes(commentTag));
-      if (existing || comments.length < 100) break;
-      page++;
-    }
-
-    if (existing && existing.body) {
-      let updatedBody = existing.body;
-
-      if (updatedBody.includes(CI_SECTION_HEADER)) {
-        // Replace existing CI status block up to next section or tag
-        const parts = updatedBody.split(CI_SECTION_HEADER);
-        const beforeHeader = parts[0];
-        // Retain COMMENT_TAG
-        updatedBody = `${beforeHeader.trimEnd()}\n\n${ciSummaryMarkdown}\n\n${commentTag}`;
-      } else {
-        // Append before COMMENT_TAG
-        const tagIndex = updatedBody.indexOf(commentTag);
-        if (tagIndex !== -1) {
-          const beforeTag = updatedBody.slice(0, tagIndex).trimEnd();
-          updatedBody = `${beforeTag}\n\n---\n\n${ciSummaryMarkdown}\n\n${commentTag}`;
-        } else {
-          updatedBody = `${updatedBody.trimEnd()}\n\n---\n\n${ciSummaryMarkdown}\n\n${commentTag}`;
-        }
-      }
-
-      const updateRes = await fetch(
-        `https://api.github.com/repos/${repo}/issues/comments/${existing.id}`,
-        {
-          method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: updatedBody }),
-        }
-      );
-
-      if (updateRes.ok) {
-        console.log(`✅ Successfully updated Sticky Comment on PR #${prNumber} with CI summary.`);
-        return;
-      }
-      console.warn(`⚠️ Failed to patch existing comment: HTTP ${updateRes.status}`);
-    }
-
-    // No existing comment with tag found, create a new one
-    const newBody = `${ciSummaryMarkdown}\n\n${commentTag}`;
-    const postRes = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`,
-      {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: newBody }),
-      }
-    );
-
-    if (postRes.ok) {
-      console.log(`✅ Created new Sticky Comment with CI summary on PR #${prNumber}.`);
-    } else {
-      console.warn(`⚠️ Failed to create new comment: HTTP ${postRes.status}`);
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`⚠️ Error updating PR sticky comment: ${msg}`);
-  }
-}
-
 export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   const token = (config.githubToken || process.env.GITHUB_TOKEN || '').trim();
   const repo = (config.repo || process.env.REPO_FULL_NAME || process.env.GITHUB_REPOSITORY || '').trim();
@@ -502,13 +247,11 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   const testRaw = (config.testResult || process.env.TEST_RESULT || '').trim();
   const extraStagesRaw = (config.extraStages || process.env.REVIEWGROUND_EXTRA_STAGES || process.env.EXTRA_STAGES || '').trim();
 
-  // 1. Live Job Auto-Discovery from GitHub Actions API
+  // 1. Live Job Auto-Discovery & Duration mapping
   const discoveredJobs = await fetchWorkflowRunJobs(repo, runId, token);
   if (discoveredJobs.length > 0) {
     console.log(`- Discovered Workflow Jobs (${discoveredJobs.length}): ${discoveredJobs.map((j) => j.name).join(', ')}`);
   }
-
-  // 2. Duration mapping
   const durations = await fetchStageDurations(repo, runId, token);
 
   const hasData = hasCiData(
@@ -566,7 +309,6 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
       extraStagesRaw || undefined
     );
   } else {
-    // Only extra stages or explicit mode='summary'
     summaryMarkdown = buildDynamicCiSummaryMarkdown(
       [],
       runId,
@@ -575,19 +317,19 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
     );
   }
 
-  // 1. Output to console
+  // Console output
   console.log('\n================== 🚦 CI SUMMARY ==================\n');
   console.log(summaryMarkdown);
   console.log('====================================================\n');
 
-  // 2. Append to GitHub Actions Step Summary (async to avoid blocking event loop)
+  // Step Summary
   const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummaryFile && fs.existsSync(stepSummaryFile)) {
     await fs.promises.appendFile(stepSummaryFile, `\n\n${summaryMarkdown}\n`);
     console.log('✅ CI Summary appended to GitHub Actions step summary.');
   }
 
-  // 3. Update or create Sticky PR Comment
+  // Update or create Sticky PR Comment
   await updateOrCreateStickyComment(summaryMarkdown, token, repo, prNumber, commentTag);
 
   return summaryMarkdown;
