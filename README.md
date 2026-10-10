@@ -5,7 +5,8 @@
 **The Universal, High-Precision AI Code Reviewer & Post-CI Verification Engine for GitHub Actions.**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
-[![GitHub Action](https://img.shields.io/badge/GitHub%20Marketplace-ReviewGround-purple.svg?logo=githubactions)](https://github.com/marketplace/actions/reviewground-ai-code-reviewer-ci-verification)
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Marketplace-ReviewGround-purple.svg?logo=githubactions)](https://github.com/marketplace/actions/reviewground)
+[![Action: v1](https://img.shields.io/badge/Action-v1-purple.svg?logo=githubactions)](https://github.com/marketplace/actions/reviewground)
 [![Latest Release](https://img.shields.io/github/v/release/arungupta1526/ReviewGround?color=blue&label=Latest%20Release)](https://github.com/arungupta1526/ReviewGround/releases)
 [![Node Runtime](https://img.shields.io/badge/Node-24%20LTS-green.svg?logo=node.js)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-blue.svg?logo=typescript)](package.json)
