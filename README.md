@@ -154,11 +154,13 @@ ReviewGround features **Smart Mismatch Auto-Routing**:
 
 ## ⚡ Execution Modes (`mode`)
 
-ReviewGround operates in three execution modes configured via the `mode` input (`mode: review | summary | all`):
+ReviewGround operates in five execution modes configured via the `mode` input (`mode: review | summary | all | describe | slash-command`):
 
 | Mode | Intended Use | Behavior |
 |---|---|---|
-| **`mode: review`** *(Recommended for Code Review)* | **AI Code Review Only** | Runs universal multi-provider AI review, live npm package registry grounding, and 1-click interactive diff suggestions. **Post-CI verification table is completely suppressed.** |
+| **`mode: review`** *(Recommended for Code Review)* | **AI Code Review Only** | Runs universal multi-provider AI review, live multi-registry grounding, smart diff prioritization, OWASP tagging, and 1-click interactive diff suggestions. **Post-CI verification table is completely suppressed.** |
+| **`mode: describe`** | **PR Description & Walkthrough** | Analyzes the diff to auto-generate a comprehensive PR summary, key changes bullets, an interactive file walkthrough table, and testing checklist directly into the PR body. |
+| **`mode: slash-command`** | **Interactive PR Chat** | Handles `issue_comment` triggers for commands like `@reviewground explain`, `@reviewground fix`, and `/review full/security`. |
 | **`mode: summary`** | **Post-CI Verification Only** | Queries GitHub Actions Workflow Jobs API to render duration metrics (`14s`, `1m 20s`) and status badges for Gitleaks, Dependency Audit, Build, Unit Tests, and custom stages. |
 | **`mode: all`** *(Default)* | **Unified Review & CI Verification** | Runs AI review first, then appends the CI verification summary to the single sticky comment. Features **Smart CI Auto-Skip**: If no CI stages (`gitleaks-result`, `build-result`, etc.) or matching workflow jobs are detected, the CI table is **automatically omitted** to prevent noisy `unknown` status rows. |
 
@@ -391,7 +393,7 @@ jobs:
         with:
           # ── Core Execution & Git Controls ────────────────────────────────
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          mode: 'all'                             # 'review' | 'summary' | 'all' | 'slash-command'
+          mode: 'all'                             # 'review' | 'summary' | 'all' | 'describe' | 'slash-command'
           base-branch: 'main'                     # Target branch for diff (default: 'main')
 
           # ── AI Review Depth & Customization ──────────────────────────────
@@ -421,7 +423,8 @@ jobs:
           # ── v1.3.0: Missing Unit Test Detection & Stubs ──────────────────
           enable-test-coverage-check: 'true'     # Warn on new exports lacking tests + suggest stubs (default: 'true')
 
-          # ── Enterprise Merge Gates & Badges (Opt-In) ─────────────────────
+          # ── v1.3.0: Automated PR Description & Walkthrough (Opt-In) ───────
+          generate-pr-description: 'false'       # Auto-generate PR summary, walkthrough table & checklist
           enable-pr-description-update: 'false'  # Append 🟢/🟡/🔴 risk badge & walkthrough table to PR body
           enable-check-run: 'false'              # Create blocking pass/fail GitHub Check Run gate
 
@@ -608,7 +611,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | Setting | Action Input (`with:`) | Environment Variable & Secret Aliases (`env:` / `vars.*`) | Default |
 |---|---|---|:---:|
 | **GitHub Token** | `github-token` | `GITHUB_TOKEN`, `GH_TOKEN` | `${{ github.token }}` |
-| **Execution Mode** | `mode` | `REVIEWGROUND_MODE`, `MODE` | `all` (`review` \| `summary` \| `all`) |
+| **Execution Mode** | `mode` | `REVIEWGROUND_MODE`, `MODE` | `all` (`review` \| `summary` \| `all` \| `describe` \| `slash-command`) |
 | **Preferred Provider** | `provider` | `REVIEWGROUND_PROVIDER`, `PROVIDER`, `LLM_PROVIDER` | *Auto-detected* |
 | **Model Override** | `model` | `REVIEWGROUND_MODEL`, `MODEL`, `LLM_MODEL` | *Provider default* |
 | **Fallback Models** | `fallback-models` | `FALLBACK_MODELS`, `<PROVIDER>_FALLBACK_MODELS` | *Built-in 3–4 models* |
@@ -634,6 +637,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Review Level** | `review-level` | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL` | `standard` (`critical` \| `standard` \| `comprehensive`) |
 | **Ignore Patterns** | `ignore-patterns` | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS` | — (comma-separated globs e.g. `dist/**,*.min.js`) |
 | **Review Language** | `review-language` | `REVIEWGROUND_REVIEW_LANGUAGE`, `REVIEW_LANGUAGE` | `en` (e.g. `ja`, `es`, `de`, `zh`, `pt`, `fr`) |
+| **Generate PR Description** | `generate-pr-description` | `GENERATE_PR_DESCRIPTION`, `REVIEWGROUND_GENERATE_PR_DESCRIPTION` | `false` — auto-generates PR summary, walkthrough table & checklist |
 | **PR Description Update** | `enable-pr-description-update` | `ENABLE_PR_DESCRIPTION_UPDATE` | `false` — auto-appends 🟢/🟡/🔴 risk badge to PR body |
 | **GitHub Check Run** | `enable-check-run` | `ENABLE_CHECK_RUN` | `false` — creates pass/fail Check Run (requires `checks: write`) |
 | **Extra CI Stages** | `extra-stages` | `REVIEWGROUND_EXTRA_STAGES`, `EXTRA_STAGES` | — JSON array e.g. `[{"name":"Deploy","result":"success"}]` |
@@ -646,6 +650,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 |---|---|
 | `reviewed` | `"true"` if an AI review was successfully generated |
 | `reviewer-engine` | The provider and model that generated the review (e.g. `Google Gemini (gemini-3.5-flash-lite)`) |
+| `described` | `"true"` if an automated PR description and walkthrough was generated |
 | `summarized` | `"true"` if the CI pipeline summary was rendered |
 | `summary-markdown`| The rendered markdown table of the CI summary and stage durations |
 
@@ -690,6 +695,59 @@ jobs:
 | `/review security` | Security-focused re-review (OWASP only) |
 | `/review performance` | Performance-focused re-review |
 | `/review` or `/review standard` | Standard re-review |
+
+---
+
+### 📝 Feature 2: Automated PR Description & Walkthrough Generator (`mode: describe`)
+
+Stop wasting time writing manual PR descriptions. ReviewGround inspects your diff and automatically generates a clean **Summary of Changes**, **Key Changes bullets**, an interactive **Walkthrough Table**, and a **Testing Checklist** directly in your PR body:
+
+```yaml
+# Standalone mode: generate description on PR open or synchronize
+- uses: arungupta1526/ReviewGround@v1
+  with:
+    mode: 'describe'
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+Or enable it alongside your code review:
+
+```yaml
+- uses: arungupta1526/ReviewGround@v1
+  with:
+    generate-pr-description: 'true'
+  env:
+    GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+```
+
+**What it generates in the PR body:**
+
+```markdown
+### 📝 Summary of Changes
+Added JWT token rotation and secure session invalidation to resolve security audit findings.
+
+### 🔑 Key Changes
+- Integrated crypto.randomUUID() for cryptographically secure session IDs.
+- Added expiry validation and automatic refresh token rotation handler.
+
+### 🔍 Changes Walkthrough
+| File | Summary of Changes |
+|---|---|
+| `src/auth/jwt.ts` | Implemented token rotation logic and expiry checks |
+| `src/api/routes.ts` | Added `/auth/refresh` endpoint with rate limiting |
+| `src/db/sessions.ts` | Added session cleanup query on logout |
+
+### 🧪 Testing Checklist
+- [ ] Unit tests added / updated
+- [ ] Manual verification completed
+- [ ] No regressions in core workflows
+
+### 🛡️ Risk Assessment
+- 🟢 **Risk Level: LOW** — Non-breaking security enhancement with 100% test coverage.
+```
+
+> **Author Preservation:** If the PR author already wrote notes or referenced issue numbers (e.g. `Fixes #42`), ReviewGround preserves the author's original text and cleanly appends the AI Walkthrough below!
 
 ---
 

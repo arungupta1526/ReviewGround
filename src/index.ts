@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import { runReview, ReviewerConfig } from './reviewer.js';
 import { runSummary, SummaryConfig } from './summary.js';
 import { handleSlashCommand, SlashCommandConfig } from './slashCommands.js';
+import { runPrDescribe, PrDescribeConfig } from './prDescriber.js';
 
 function getOptionalInput(name: string, envFallbacks?: string[] | string): string {
   const val = core.getInput(name);
@@ -127,6 +128,47 @@ async function run(): Promise<void> {
       return;
     }
 
+    // ── Feature 2: Standalone Mode 'describe' ────────────────────────────────
+    if (mode === 'describe') {
+      const describeConfig: PrDescribeConfig = {
+        githubToken: token,
+        repo,
+        prNumber,
+        baseBranch: getOptionalInput('base-branch', ['REVIEWGROUND_BASE_BRANCH', 'BASE_BRANCH']) || 'main',
+        provider: getOptionalInput('provider', ['REVIEWGROUND_PROVIDER', 'PROVIDER', 'LLM_PROVIDER']) || undefined,
+        model: getOptionalInput('model', ['REVIEWGROUND_MODEL', 'MODEL', 'LLM_MODEL']) || undefined,
+        temperature: (() => {
+          const t = getOptionalInput('temperature', ['REVIEWGROUND_TEMPERATURE', 'LLM_TEMPERATURE']);
+          return t ? parseFloat(t) : undefined;
+        })(),
+        maxTokens: (() => {
+          const m = getOptionalInput('max-tokens', ['REVIEWGROUND_MAX_TOKENS', 'LLM_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : undefined;
+        })(),
+        geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
+        openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY', 'OPENAI_KEY']) || undefined,
+        anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY']) || undefined,
+        groqApiKey: getOptionalInput('groq-api-key', ['GROQ_API_KEY', 'GROQ_KEY']) || undefined,
+        deepseekApiKey: getOptionalInput('deepseek-api-key', ['DEEPSEEK_API_KEY', 'DEEPSEEK_KEY']) || undefined,
+        openrouterApiKey: getOptionalInput('openrouter-api-key', ['OPENROUTER_API_KEY', 'OPENROUTER_KEY']) || undefined,
+        llmBaseUrl: getOptionalInput('llm-base-url', ['LLM_BASE_URL', 'OPENAI_BASE_URL', 'OLLAMA_BASE_URL', 'OLLAMA_HOST']) || undefined,
+        llmApiKey: getOptionalInput('llm-api-key', ['LLM_API_KEY', 'CUSTOM_API_KEY']) || undefined,
+        enableSearchGrounding: getBooleanInput('enable-search-grounding', ['ENABLE_SEARCH_GROUNDING'], true),
+        fallbackModels: getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+          ? getOptionalInput('fallback-models', ['REVIEWGROUND_FALLBACK_MODELS', 'FALLBACK_MODELS'])
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
+      };
+
+      console.log('\n--- 📝 Generating PR Description & Walkthrough ---');
+      const describeResult = await runPrDescribe(describeConfig);
+      core.setOutput('described', describeResult ? 'true' : 'false');
+      console.log('\n✨ ReviewGround PR description completed.');
+      return;
+    }
+
     const baseConfig = {
       githubToken: token,
       repo,
@@ -183,6 +225,9 @@ async function run(): Promise<void> {
               .filter(Boolean)
           : undefined,
         reviewLanguage: getOptionalInput('review-language', ['REVIEWGROUND_REVIEW_LANGUAGE', 'REVIEW_LANGUAGE']) || 'en',
+        generatePrDescription:
+          getBooleanInput('generate-pr-description', ['GENERATE_PR_DESCRIPTION', 'REVIEWGROUND_GENERATE_PR_DESCRIPTION'], false) ||
+          getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
         enablePrDescriptionUpdate: getBooleanInput('enable-pr-description-update', ['ENABLE_PR_DESCRIPTION_UPDATE'], false),
         enableCheckRun: getBooleanInput('enable-check-run', ['ENABLE_CHECK_RUN'], false),
       };

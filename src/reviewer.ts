@@ -12,6 +12,7 @@ import { ProviderManager, ProviderResponse, ReviewOptions } from './providers/in
 import { verifyPackagesMultiRegistry } from './packageRegistry.js';
 import { packPrioritizedDiff } from './diffPrioritizer.js';
 import { analyzeTestCoverage } from './testCoverageDetector.js';
+import { runPrDescribe } from './prDescriber.js';
 
 /**
  * Truncates a git diff at a clean hunk boundary (on a `diff --git` line)
@@ -55,6 +56,8 @@ export interface ReviewerConfig {
   enableInlineSuggestions?: boolean;
   enableNpmVerify?: boolean;
   enablePrDescriptionUpdate?: boolean;
+  /** Feature 2: Automated PR description & walkthrough table generator */
+  generatePrDescription?: boolean;
   enableCheckRun?: boolean;
   /** Feature 1 & 3: Multi-registry grounding (npm + pypi + crates + go) */
   enableMultiRegistryVerify?: boolean;
@@ -686,9 +689,26 @@ ${cleanReviewText}${testCoverageSection}\n\n---\n*Generated automatically by [Re
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
   }
 
-  // 5. F1 — Auto-update PR description with AI summary + risk badge
-  if (config.enablePrDescriptionUpdate && token && repo && prNumber) {
-    await updatePrDescription(cleanReviewText, token, repo, prNumber);
+  // 5. Feature 2 — Auto-generate PR description with walkthrough table & checklist
+  if ((config.generatePrDescription || config.enablePrDescriptionUpdate) && token && repo && prNumber) {
+    await runPrDescribe({
+      githubToken: token,
+      repo,
+      prNumber,
+      baseBranch: config.baseBranch,
+      provider: config.provider,
+      model: config.model,
+      fallbackModels: config.fallbackModels,
+      geminiApiKey: config.geminiApiKey,
+      openaiApiKey: config.openaiApiKey,
+      anthropicApiKey: config.anthropicApiKey,
+      groqApiKey: config.groqApiKey,
+      deepseekApiKey: config.deepseekApiKey,
+      openrouterApiKey: config.openrouterApiKey,
+      llmBaseUrl: config.llmBaseUrl,
+      llmApiKey: config.llmApiKey,
+      enableSearchGrounding: config.enableSearchGrounding,
+    });
   }
 
   // 6. F3 — Create GitHub Check Run (pass/fail gate for branch protection)

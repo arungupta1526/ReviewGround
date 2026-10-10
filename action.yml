@@ -12,7 +12,7 @@ inputs:
     default: '${{ github.token }}'
 
   mode:
-    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), "all" (both), or "slash-command" (handle @reviewground/@review PR comment commands via issue_comment event)'
+    description: 'Execution mode: "review" (AI review only), "summary" (Post-CI status only), "all" (both), "describe" (PR description & walkthrough only), or "slash-command" (handle @reviewground/@review PR comment commands via issue_comment event)'
     required: false
     default: 'all'
 
@@ -142,6 +142,11 @@ inputs:
     required: false
     default: 'false'
 
+  generate-pr-description:
+    description: 'Auto-generate PR description with summary, walkthrough table, and testing checklist (default false)'
+    required: false
+    default: 'false'
+
   enable-check-run:
     description: 'Create a GitHub Check Run with pass/fail gate based on critical issues found (requires checks:write permission, default false)'
     required: false
@@ -177,6 +182,8 @@ outputs:
     description: 'Whether an AI code review was generated ("true" or "false")'
   reviewer-engine:
     description: 'Name and model of the AI provider that generated the review'
+  described:
+    description: 'Whether an automated PR description and walkthrough was generated ("true" or "false")'
   summarized:
     description: 'Whether the CI pipeline summary was generated ("true" or "false")'
   summary-markdown:
