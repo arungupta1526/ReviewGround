@@ -7,24 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.0](https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0) (2026-10-09)
+## [1.1.0](https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0) - 2026-10-10
 
-
-### Features
-
-* dynamic CI job discovery, smart CI auto-skip, clear error notices, and Google Release Please ([3eaf670](https://github.com/arungupta1526/ReviewGround/commit/3eaf670f82f48aceb265e741ee0df6273e6b4fcb))
-* **reviewer:** brand review header with ReviewGround and add collapsible demo screenshots to README ([2a765db](https://github.com/arungupta1526/ReviewGround/commit/2a765db9fecad57e83f8a0f060cb17eac8dc4e18))
-* **summary:** add dynamic CI workflow job discovery and secret aliases ([71177de](https://github.com/arungupta1526/ReviewGround/commit/71177def048863acd8110134df8751bf24b053cd))
-* **summary:** add smart CI table auto-skip and clear PR setup/error notices ([a8dfbed](https://github.com/arungupta1526/ReviewGround/commit/a8dfbed25d7717326dbb3b121254f25e51796dc2))
-
-## [Unreleased]
-
-### Added
-- Fully Dynamic CI Workflow Job Auto-Discovery (`fetchWorkflowRunJobs()`, `buildDynamicCiSummaryMarkdown()`) — Automatically discovers all running and completed jobs in the workflow run via the GitHub Actions API without hardcoding 4 fixed stages, displaying real job names, statuses, durations, and log links
-- Flexible API Key & Base URL Aliases — Added support for popular shorthand and platform aliases: `GEMINI_KEY`, `GROQ_KEY`, `OPENROUTER_KEY`, `OPENAI_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY`, `DEEPSEEK_KEY`, `OLLAMA_BASE_URL`, `OLLAMA_HOST`, and `CUSTOM_API_KEY`
-- `hasCiData()` & Smart CI Verification Auto-Skip — In `mode: all` (default), automatically suppresses the Post-CI verification table if no CI stage results (`gitleaks-result`, `audit-result`, `build-result`, `test-result`, `extra-stages`) or matching workflow jobs are detected, eliminating noisy `unknown` status rows
-- Actionable missing-key setup guidance PR comments — When a pull request runs without any configured LLM API keys, ReviewGround posts a clean, interactive setup banner on the PR with direct links to free provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`)
-- Diagnostic failure notifications on PR comments — When all configured AI providers fail due to quota exhaustion, rate limits, or network timeouts, posts a diagnostic notice linking to GitHub Actions run logs
+### Features & Additions
+- **Fully Dynamic CI Workflow Job Auto-Discovery** (`fetchWorkflowRunJobs()`, `buildDynamicCiSummaryMarkdown()`) — Automatically discovers all running and completed jobs in the workflow run via the GitHub Actions API without hardcoding 4 fixed stages, displaying real job names, statuses, durations, and log links
+- **Smart CI Verification Auto-Skip** (`hasCiData()`) — In `mode: all` (default), automatically suppresses the Post-CI verification table if no CI stage results (`gitleaks-result`, `audit-result`, `build-result`, `test-result`, `extra-stages`) or matching workflow jobs are detected, eliminating noisy `unknown` status rows
+- **Actionable Missing-Key Setup Guidance** — When a pull request runs without any configured LLM API keys, ReviewGround posts a clean, interactive setup banner on the PR with direct links to free provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`)
+- **Diagnostic Failure Notifications** — When all configured AI providers fail due to quota exhaustion, rate limits, or network timeouts, posts a diagnostic notice linking to GitHub Actions run logs
+- **ReviewGround Header Branding** — Standardized review comment headers to `## 🛡️ ReviewGround AI Code Review & Security Analysis`
+- **Collapsible UI Screenshots & Option 6 Config** — Added live demo screenshots with hidden `<details>` accordion and exhaustive configuration examples in `README.md`
+- **Flexible Secret Aliases** — Added support for popular shorthand and platform aliases: `GEMINI_KEY`, `GROQ_KEY`, `OPENROUTER_KEY`, `OPENAI_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY`, `DEEPSEEK_KEY`, `OLLAMA_BASE_URL`, `OLLAMA_HOST`, and `CUSTOM_API_KEY`
+- **Google Release Please Automation** — Configured `.github/workflows/release-please.yml` for automated semver releases and floating `v1` major tag management
 
 ### Changed
 - Prominently documented execution modes (`mode: review`, `mode: summary`, `mode: all`) in `README.md` and defaulted Quickstart workflow examples to `mode: review`
@@ -98,5 +91,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All 7 provider adapters now use shared `fetchWithRetry` instead of raw `fetch` + `AbortSignal.timeout` — adds automatic retry resilience with no behavior change for the happy path
 - `AGENTS.md` rule #7 added: mandatory CHANGELOG.md update required after every code change
 
-[Unreleased]: https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...HEAD
+[1.1.0]: https://github.com/arungupta1526/ReviewGround/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/arungupta1526/ReviewGround/releases/tag/v1.0.0
