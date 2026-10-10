@@ -644,6 +644,7 @@ reviewground/
 │   └── index.ts               # 🚀 GitHub Action entry point
 ├── test/                      # 🧪 Unit & invariant test suites (100% passing)
 │   ├── features.test.ts       # Tests for registry verification, diff prioritization, test coverage
+│   ├── github.test.ts         # Tests for repo sanitization, SSRF protection, token & cost calculation
 │   ├── prDescriber.test.ts    # Tests for PR description generation & body merging
 │   ├── providers.test.ts      # Tests for multi-provider BYOK routing & fallbacks
 │   ├── reviewer.test.ts       # Tests for review engine, inline suggestions & Zod validation
