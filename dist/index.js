@@ -41188,7 +41188,7 @@ async function createCheckRun(reviewText, token, repo, prNumber) {
         output: {
           title,
           summary: summary2,
-          text: reviewText.slice(0, 65535)
+          text: Array.from(reviewText).slice(0, 2e4).join("")
         }
       })
     });

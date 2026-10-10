@@ -149,7 +149,7 @@ export async function createCheckRun(
         output: {
           title,
           summary,
-          text: reviewText.slice(0, 65535),
+          text: Array.from(reviewText).slice(0, 20000).join(''),
         },
       }),
     });
