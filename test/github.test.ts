@@ -103,5 +103,18 @@ describe('PR Review Thread Outdated Folding Automation', () => {
       async () => resolvePreviousInlineSuggestions('owner/repo', 'fake-token', 'not-a-number')
     );
   });
+
+  it('validates repo and prNumber in prunePreviousInlineComments before executing REST calls', async () => {
+    const { prunePreviousInlineComments } = await import('../src/github/reviewThreads.js');
+    await assert.rejects(
+      async () => prunePreviousInlineComments('invalid-repo', 'fake-token', '12'),
+      /Invalid repository format/
+    );
+    await assert.rejects(
+      async () => prunePreviousInlineComments('owner/repo', 'fake-token', 'invalid-pr'),
+      /Invalid PR number/
+    );
+  });
 });
+
 

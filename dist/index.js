@@ -40876,6 +40876,61 @@ async function resolvePreviousInlineSuggestions(repo, token, prNumber) {
     console.warn("\u2139\uFE0F Could not resolve previous review threads via GraphQL:", err);
   }
 }
+async function prunePreviousInlineComments(repo, token, prNumber) {
+  validateRepo(repo);
+  validatePrNumber(prNumber);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "ReviewGround-AutoPruner"
+  };
+  let deletedCount = 0;
+  try {
+    let page = 1;
+    const maxPages = 3;
+    const botSuggestions = [];
+    while (page <= maxPages) {
+      const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/comments?per_page=100&page=${page}`, { headers });
+      if (!res.ok) {
+        if (page === 1) {
+          console.warn(`\u26A0\uFE0F Could not fetch PR review comments for pruning: HTTP ${res.status}`);
+        }
+        break;
+      }
+      const comments = await res.json();
+      if (!Array.isArray(comments) || comments.length === 0) break;
+      const matches = comments.filter(
+        (c) => c.body?.includes("ReviewGround 1-Click Code Suggestion") && (c.user?.login?.includes("bot") || c.user?.login === "github-actions[bot]")
+      );
+      botSuggestions.push(...matches);
+      if (comments.length < 100) break;
+      page++;
+    }
+    if (botSuggestions.length === 0) {
+      return 0;
+    }
+    console.log(`\u{1F9F9} Found ${botSuggestions.length} previous ReviewGround inline suggestion(s) to prune.`);
+    await Promise.all(
+      botSuggestions.map(async (c) => {
+        try {
+          const delRes = await fetch(`https://api.github.com/repos/${repo}/pulls/comments/${c.id}`, {
+            method: "DELETE",
+            headers
+          });
+          if (delRes.status === 204 || delRes.ok) {
+            deletedCount++;
+          }
+        } catch (err) {
+          console.warn(`\u26A0\uFE0F Failed to prune comment ${c.id}:`, err);
+        }
+      })
+    );
+    console.log(`\u{1F9F9} Successfully pruned ${deletedCount} previous ReviewGround inline suggestion(s).`);
+  } catch (err) {
+    console.warn("\u26A0\uFE0F Error during pruning of previous inline comments:", err);
+  }
+  return deletedCount;
+}
 
 // src/github/comments.ts
 var DEFAULT_COMMENT_TAG = "<!-- reviewground-code-review -->";
@@ -41621,6 +41676,9 @@ ${cleanReviewText}${testCoverageSection}
     console.log("\u2705 Review appended to GitHub Actions step summary.");
   }
   await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag);
+  if (config2.enablePruneInlineSuggestions && token && repo && prNumber) {
+    await prunePreviousInlineComments(repo, token, prNumber);
+  }
   if (config2.enableInlineSuggestions !== false && token && repo && prNumber) {
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
   }
@@ -42246,6 +42304,11 @@ async function run() {
         })(),
         enableSearchGrounding: getBooleanInput("enable-search-grounding", ["ENABLE_SEARCH_GROUNDING"], true),
         enableInlineSuggestions: getBooleanInput("enable-inline-suggestions", ["ENABLE_INLINE_SUGGESTIONS"], true),
+        enablePruneInlineSuggestions: getBooleanInput(
+          "enable-prune-inline-suggestions",
+          ["ENABLE_PRUNE_INLINE_SUGGESTIONS", "REVIEWGROUND_PRUNE_INLINE_SUGGESTIONS"],
+          false
+        ),
         enableNpmVerify: getBooleanInput("enable-npm-verify", ["ENABLE_NPM_VERIFY"], true),
         // Feature 3: Multi-ecosystem registry grounding
         enableMultiRegistryVerify: getBooleanInput("enable-multi-registry-verify", ["ENABLE_MULTI_REGISTRY_VERIFY"], true),

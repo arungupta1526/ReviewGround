@@ -4,7 +4,7 @@
  * ReviewGround 1-click code suggestion threads on subsequent CI runs.
  */
 
-import { validateRepo } from './comments.js';
+import { validateRepo, validatePrNumber } from './comments.js';
 
 /**
  * Automatically resolves and folds previous ReviewGround inline suggestion threads
@@ -111,4 +111,86 @@ export async function resolvePreviousInlineSuggestions(
   } catch (err: unknown) {
     console.warn('ℹ️ Could not resolve previous review threads via GraphQL:', err);
   }
+}
+
+/**
+ * Automatically purges and prunes previous ReviewGround inline suggestions
+ * using GitHub REST API. Controlled by `enable-prune-inline-suggestions` (default: false).
+ */
+export async function prunePreviousInlineComments(
+  repo: string,
+  token: string,
+  prNumber: string
+): Promise<number> {
+  validateRepo(repo);
+  validatePrNumber(prNumber);
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'ReviewGround-AutoPruner',
+  };
+
+  let deletedCount = 0;
+  try {
+    let page = 1;
+    const maxPages = 3;
+    const botSuggestions: Array<{ id: number }> = [];
+
+    while (page <= maxPages) {
+      const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/comments?per_page=100&page=${page}`, { headers });
+      if (!res.ok) {
+        if (page === 1) {
+          console.warn(`⚠️ Could not fetch PR review comments for pruning: HTTP ${res.status}`);
+        }
+        break;
+      }
+
+      const comments = (await res.json()) as Array<{
+        id: number;
+        body?: string;
+        user?: { login?: string };
+      }>;
+
+      if (!Array.isArray(comments) || comments.length === 0) break;
+
+      const matches = comments.filter(
+        (c) =>
+          c.body?.includes('ReviewGround 1-Click Code Suggestion') &&
+          (c.user?.login?.includes('bot') || c.user?.login === 'github-actions[bot]')
+      );
+      botSuggestions.push(...matches);
+
+      if (comments.length < 100) break;
+      page++;
+    }
+
+    if (botSuggestions.length === 0) {
+      return 0;
+    }
+
+    console.log(`🧹 Found ${botSuggestions.length} previous ReviewGround inline suggestion(s) to prune.`);
+
+    await Promise.all(
+      botSuggestions.map(async (c) => {
+        try {
+          const delRes = await fetch(`https://api.github.com/repos/${repo}/pulls/comments/${c.id}`, {
+            method: 'DELETE',
+            headers,
+          });
+          if (delRes.status === 204 || delRes.ok) {
+            deletedCount++;
+          }
+        } catch (err: unknown) {
+          console.warn(`⚠️ Failed to prune comment ${c.id}:`, err);
+        }
+      })
+    );
+
+    console.log(`🧹 Successfully pruned ${deletedCount} previous ReviewGround inline suggestion(s).`);
+  } catch (err: unknown) {
+    console.warn('⚠️ Error during pruning of previous inline comments:', err);
+  }
+
+  return deletedCount;
 }

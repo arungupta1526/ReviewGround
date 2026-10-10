@@ -408,8 +408,9 @@ jobs:
           max-tokens: '2048'                     # Max response token length (default: '2048')
           ignore-patterns: ''                    # Comma-separated globs e.g. 'dist/**,*.min.js'
 
-          # ── Grounding & Inline Suggestions (on by default) ───────────────
+          # ── Grounding & Inline Suggestions ───────────────
           enable-inline-suggestions: 'true'      # Native GitHub 1-click [ Apply suggestion ] buttons
+          enable-prune-inline-suggestions: 'false' # Auto-delete / prune outdated inline suggestions on subsequent CI runs (default: 'false')
           enable-search-grounding: 'true'        # Google Search tool grounding for Gemini
           enable-npm-verify: 'true'              # Live registry.npmjs.org anti-hallucination check
 
@@ -721,6 +722,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Custom API Key** | `llm-api-key` | `LLM_API_KEY`, `CUSTOM_API_KEY` | — |
 | **Search Grounding** | `enable-search-grounding`| `ENABLE_SEARCH_GROUNDING` | `true` |
 | **Inline Suggestions**| `enable-inline-suggestions`| `ENABLE_INLINE_SUGGESTIONS`| `true` |
+| **Prune Inline Suggestions** | `enable-prune-inline-suggestions` | `ENABLE_PRUNE_INLINE_SUGGESTIONS` | `false` — auto-deletes / prunes outdated ReviewGround inline suggestions on subsequent CI runs |
 | **NPM Verification** | `enable-npm-verify` | `ENABLE_NPM_VERIFY` | `true` |
 | **Multi-Registry Verify** | `enable-multi-registry-verify` | `ENABLE_MULTI_REGISTRY_VERIFY` | `true` — also verifies PyPI, Crates.io & Go module proxy |
 | **Cost Footer** | `enable-cost-footer` | `ENABLE_COST_FOOTER` | `true` — shows token count + estimated cost in sticky comment |

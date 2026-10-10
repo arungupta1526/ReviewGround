@@ -24,6 +24,7 @@ import {
   postOrUpdatePrComment,
   updatePrDescription,
   createCheckRun,
+  prunePreviousInlineComments,
 } from './github/index.js';
 
 // Re-export GitHub commenting & diff helpers for backward compatibility
@@ -38,6 +39,7 @@ export {
   postOrUpdatePrComment,
   updatePrDescription,
   createCheckRun,
+  prunePreviousInlineComments,
 };
 
 /**
@@ -70,6 +72,7 @@ export interface ReviewerConfig {
   ignorePatterns?: string[];
   enableSearchGrounding?: boolean;
   enableInlineSuggestions?: boolean;
+  enablePruneInlineSuggestions?: boolean;
   enableNpmVerify?: boolean;
   enablePrDescriptionUpdate?: boolean;
   generatePrDescription?: boolean;
@@ -339,6 +342,10 @@ ${cleanReviewText}${testCoverageSection}\n\n---\n*Generated automatically by [Re
 
   // Post / Update Sticky PR Comment & Suggestions
   await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag);
+
+  if (config.enablePruneInlineSuggestions && token && repo && prNumber) {
+    await prunePreviousInlineComments(repo, token, prNumber);
+  }
 
   if (config.enableInlineSuggestions !== false && token && repo && prNumber) {
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
