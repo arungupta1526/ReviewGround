@@ -84,6 +84,17 @@ async function run(): Promise<void> {
           commentBody = eventData.comment?.body || '';
           commentId = eventData.comment?.id;
           commentAuthor = eventData.comment?.user?.login;
+
+          // Security Check (CWE-284 / OWASP A01:2021 Broken Access Control):
+          // Restrict slash command execution to repository collaborators, members, contributors, or owners
+          // to prevent untrusted external actors from exhausting LLM API token quotas (Denial of Wallet).
+          const authorAssociation = eventData.comment?.author_association;
+          if (commentAuthor && authorAssociation && ['NONE', 'FIRST_TIME_CONTRIBUTOR'].includes(authorAssociation)) {
+            console.warn(
+              `⚠️ [Security] Unauthorized slash command attempt by external contributor '${commentAuthor}' (author_association: ${authorAssociation}). Skipping.`
+            );
+            return;
+          }
         } catch {
           console.warn('⚠️ Could not parse GitHub event payload for slash command.');
         }

@@ -40471,11 +40471,12 @@ ${PR_DESCRIPTION_TAG}`;
 ${PR_DESCRIPTION_TAG}`;
   }
   if (originalBody.includes(PR_DESCRIPTION_TAG)) {
-    const regex = /\n\n---\n\n### 🤖 ReviewGround PR Description & Walkthrough[\s\S]*?<!-- reviewground-pr-description -->/;
-    if (regex.test(originalBody)) {
-      return originalBody.replace(regex, aiSection);
-    }
     const tagIndex = originalBody.indexOf(PR_DESCRIPTION_TAG);
+    const prefixMatch = originalBody.lastIndexOf("---", tagIndex);
+    const startIdx = prefixMatch !== -1 ? prefixMatch : originalBody.indexOf("### \u{1F916} ReviewGround");
+    if (startIdx !== -1) {
+      return originalBody.slice(0, startIdx).trimEnd() + aiSection;
+    }
     return originalBody.slice(0, tagIndex).trimEnd() + aiSection;
   }
   return originalBody + aiSection;
@@ -41914,6 +41915,13 @@ async function run() {
           commentBody = eventData.comment?.body || "";
           commentId = eventData.comment?.id;
           commentAuthor = eventData.comment?.user?.login;
+          const authorAssociation = eventData.comment?.author_association;
+          if (commentAuthor && authorAssociation && ["NONE", "FIRST_TIME_CONTRIBUTOR"].includes(authorAssociation)) {
+            console.warn(
+              `\u26A0\uFE0F [Security] Unauthorized slash command attempt by external contributor '${commentAuthor}' (author_association: ${authorAssociation}). Skipping.`
+            );
+            return;
+          }
         } catch {
           console.warn("\u26A0\uFE0F Could not parse GitHub event payload for slash command.");
         }

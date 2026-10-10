@@ -36,6 +36,11 @@
   <img src="./images/pr-sticky-patch-history.png" alt="ReviewGround Single Sticky Comment History" width="850" />
 </p>
 
+<p align="center">
+  <b>4. Native 1-Click Code Suggestions on PR Diff (GitHub Files Changed Tab)</b><br/>
+  <img src="./images/pr-1-click-code-suggestion.png" alt="ReviewGround 1-Click Code Suggestion in GitHub PR Diff" width="850" />
+</p>
+
 </details>
 
 ---
@@ -601,6 +606,11 @@ Developers can apply fixes with native GitHub buttons directly in the **Files ch
 │  [ Apply suggestion ]   [ Add suggestion to batch ]    │
 └────────────────────────────────────────────────────────┘
 ```
+
+<p align="center">
+  <img src="./images/pr-1-click-code-suggestion.png" alt="ReviewGround 1-Click Code Suggestion in GitHub PR Diff" width="850" />
+</p>
+
 All line numbers are validated and safely coerced with **Zod 4.6.5** schemas (`InlineSuggestionsListSchema`), preventing runtime crashes when LLMs return string line numbers.
 
 ### 3. 📊 Post-CI Single Sticky PR Summary & Dynamic Job Discovery
