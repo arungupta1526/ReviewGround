@@ -110,7 +110,8 @@ export async function fetchPrReviewComment(
   };
 
   let page = 1;
-  while (true) {
+  const MAX_PAGES = 10;
+  while (page <= MAX_PAGES) {
     const res = await fetch(
       `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
       { headers }
@@ -153,8 +154,12 @@ export async function postDirectComment(
   }
 }
 
+import { resolvePreviousInlineSuggestions } from './reviewThreads.js';
+export { resolvePreviousInlineSuggestions };
+
 /**
- * Posts native GitHub 1-click commit suggestions on PR code diff.
+ * Posts native GitHub 1-click commit suggestions on PR code diff,
+ * after automatically resolving any outdated ReviewGround suggestion threads.
  */
 export async function postInlineSuggestions(
   suggestions: InlineSuggestion[],
@@ -162,8 +167,15 @@ export async function postInlineSuggestions(
   repo: string,
   prNumber: string
 ): Promise<void> {
-  if (suggestions.length === 0) return;
   validateRepo(repo);
+
+  // Automatically fold/resolve previous ReviewGround suggestions in GitHub UI
+  await resolvePreviousInlineSuggestions(repo, token, prNumber);
+
+  if (suggestions.length === 0) {
+    console.log('✅ No new inline suggestions needed — previous suggestion threads resolved/folded.');
+    return;
+  }
 
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -248,7 +260,8 @@ export async function postOrUpdatePrComment(
   try {
     let existing: { id: number; body?: string } | undefined;
     let page = 1;
-    while (!existing) {
+    const MAX_PAGES = 10;
+    while (!existing && page <= MAX_PAGES) {
       const listRes = await fetch(
         `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
         { headers }

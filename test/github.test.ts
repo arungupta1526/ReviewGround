@@ -59,3 +59,21 @@ describe('Token & Cost Transparency Estimator', () => {
     assert.ok(footer.includes('Saved ~$20–50/mo'));
   });
 });
+
+describe('PR Review Thread Outdated Folding Automation', () => {
+  it('rejects invalid repo formats before attempting GraphQL calls', async () => {
+    const { resolvePreviousInlineSuggestions } = await import('../src/github/reviewThreads.js');
+    await assert.rejects(
+      async () => resolvePreviousInlineSuggestions('invalid-repo', 'fake-token', '12'),
+      /Invalid repository format/
+    );
+  });
+
+  it('gracefully exits without throwing for malformed PR numbers', async () => {
+    const { resolvePreviousInlineSuggestions } = await import('../src/github/reviewThreads.js');
+    await assert.doesNotReject(
+      async () => resolvePreviousInlineSuggestions('owner/repo', 'fake-token', 'not-a-number')
+    );
+  });
+});
+

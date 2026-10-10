@@ -28,7 +28,8 @@ export async function updateOrCreateStickyComment(
   try {
     let existing: { id: number; body?: string } | undefined;
     let page = 1;
-    while (!existing) {
+    const MAX_PAGES = 10;
+    while (!existing && page <= MAX_PAGES) {
       const listRes = await fetch(
         `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
         { headers }

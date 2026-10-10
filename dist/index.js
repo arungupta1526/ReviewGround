@@ -40799,6 +40799,76 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
+// src/github/reviewThreads.ts
+async function resolvePreviousInlineSuggestions(repo, token, prNumber) {
+  validateRepo(repo);
+  const [owner, name] = repo.split("/");
+  const prNumInt = parseInt(prNumber, 10);
+  if (!owner || !name || isNaN(prNumInt)) return;
+  const query = `
+    query($owner: String!, $name: String!, $pr: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 50) {
+            nodes {
+              id
+              isResolved
+              comments(first: 1) {
+                nodes {
+                  body
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+  try {
+    const res = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "ReviewGround-AutoResolver",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query,
+        variables: { owner, name, pr: prNumInt }
+      })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const threads = data.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+    for (const thread of threads) {
+      if (thread.isResolved) continue;
+      const firstCommentBody = thread.comments?.nodes?.[0]?.body ?? "";
+      if (!firstCommentBody.includes("ReviewGround 1-Click Code Suggestion")) continue;
+      await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "User-Agent": "ReviewGround-AutoResolver",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          query: `
+            mutation($threadId: ID!) {
+              resolveReviewThread(input: { threadId: $threadId }) {
+                thread { id isResolved }
+              }
+            }
+          `,
+          variables: { threadId: thread.id }
+        })
+      });
+      console.log(`\u{1F9F9} Automatically resolved/folded outdated ReviewGround review thread (${thread.id}).`);
+    }
+  } catch (err) {
+    console.warn("\u2139\uFE0F Could not resolve previous review threads via GraphQL:", err);
+  }
+}
+
 // src/github/comments.ts
 var DEFAULT_COMMENT_TAG = "<!-- reviewground-code-review -->";
 var CI_SECTION_HEADER = "### \u{1F6A6} CI Pipeline Results & Verification";
@@ -40868,7 +40938,8 @@ async function fetchPrReviewComment(repo, token, prNumber, commentTag) {
     "User-Agent": "ReviewGround-SlashCommand"
   };
   let page = 1;
-  while (true) {
+  const MAX_PAGES = 10;
+  while (page <= MAX_PAGES) {
     const res = await fetch(
       `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
       { headers }
@@ -40902,8 +40973,12 @@ async function postDirectComment(body, repo, token, prNumber) {
   }
 }
 async function postInlineSuggestions(suggestions, token, repo, prNumber) {
-  if (suggestions.length === 0) return;
   validateRepo(repo);
+  await resolvePreviousInlineSuggestions(repo, token, prNumber);
+  if (suggestions.length === 0) {
+    console.log("\u2705 No new inline suggestions needed \u2014 previous suggestion threads resolved/folded.");
+    return;
+  }
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -40972,7 +41047,8 @@ ${commentTag}`;
   try {
     let existing;
     let page = 1;
-    while (!existing) {
+    const MAX_PAGES = 10;
+    while (!existing && page <= MAX_PAGES) {
       const listRes = await fetch(
         `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
         { headers }
@@ -41201,7 +41277,8 @@ async function updateOrCreateStickyComment(ciSummaryMarkdown, token, repo, prNum
   try {
     let existing;
     let page = 1;
-    while (!existing) {
+    const MAX_PAGES = 10;
+    while (!existing && page <= MAX_PAGES) {
       const listRes = await fetch(
         `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
         { headers }
@@ -41500,7 +41577,7 @@ ${cleanReviewText}${testCoverageSection}
     console.log("\u2705 Review appended to GitHub Actions step summary.");
   }
   await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag);
-  if (config2.enableInlineSuggestions !== false && token && repo && prNumber && inlineSuggestions.length > 0) {
+  if (config2.enableInlineSuggestions !== false && token && repo && prNumber) {
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
   }
   if ((config2.generatePrDescription || config2.enablePrDescriptionUpdate) && token && repo && prNumber) {

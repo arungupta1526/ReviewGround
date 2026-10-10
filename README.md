@@ -613,6 +613,7 @@ reviewground/
 │   ├── github/                # 🐙 GitHub REST API integration
 │   │   ├── checks.ts          # GitHub Check Run gates & PR description updates
 │   │   ├── comments.ts        # Diff fetching, inline suggestions & comment management
+│   │   ├── reviewThreads.ts   # GraphQL reviewThreads query & auto-resolve/outdated folding
 │   │   ├── stickyComment.ts   # In-place sticky comment update lifecycle
 │   │   ├── workflowJobs.ts    # GitHub Actions API workflow run & stage duration tracking
 │   │   └── index.ts

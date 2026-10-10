@@ -340,7 +340,7 @@ ${cleanReviewText}${testCoverageSection}\n\n---\n*Generated automatically by [Re
   // Post / Update Sticky PR Comment & Suggestions
   await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag);
 
-  if (config.enableInlineSuggestions !== false && token && repo && prNumber && inlineSuggestions.length > 0) {
+  if (config.enableInlineSuggestions !== false && token && repo && prNumber) {
     await postInlineSuggestions(inlineSuggestions, token, repo, prNumber);
   }
 
