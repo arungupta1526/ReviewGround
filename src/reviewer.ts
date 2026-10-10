@@ -12,7 +12,7 @@ import { packPrioritizedDiff } from './diffPrioritizer.js';
 import { analyzeTestCoverage } from './testCoverageDetector.js';
 import { runPrDescribe } from './prDescriber.js';
 import { buildReviewPrompt } from './prompts/index.js';
-import { generateCostFooter } from './metrics/index.js';
+import { generateCostFooter, parseCostHistory, CostHistoryEntry } from './metrics/index.js';
 import {
   DEFAULT_COMMENT_TAG,
   CI_SECTION_HEADER,
@@ -22,6 +22,7 @@ import {
   getPullRequestDiff,
   postInlineSuggestions,
   postOrUpdatePrComment,
+  fetchPrReviewComment,
   updatePrDescription,
   createCheckRun,
   prunePreviousInlineComments,
@@ -312,7 +313,19 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   const groundingBadge = response.searchGroundingUsed ? ' 🌐 *Live Search Grounded*' : '';
   const engineString = `${response.provider} (${response.model})${groundingBadge}`;
 
-  // Cost footer
+  // Cost footer & cumulative multi-run cost tracking
+  let previousHistory: CostHistoryEntry[] = [];
+  if (config.enableCostFooter !== false && token && repo && prNumber) {
+    try {
+      const existingComment = await fetchPrReviewComment(repo, token, prNumber, commentTag);
+      if (existingComment) {
+        previousHistory = parseCostHistory(existingComment);
+      }
+    } catch {
+      // Non-blocking: gracefully fallback to fresh history if unable to fetch previous PR comment
+    }
+  }
+
   const costFooter = config.enableCostFooter !== false
     ? generateCostFooter({
         provider: response.provider,
@@ -320,6 +333,9 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
         diffLength: truncatedDiff.length,
         responseLength: response.text.length,
         latencyMs: response.latencyMs,
+        commitSha: process.env.GITHUB_SHA,
+        runId: config.runId || process.env.GITHUB_RUN_ID,
+        previousHistory,
       })
     : '';
 

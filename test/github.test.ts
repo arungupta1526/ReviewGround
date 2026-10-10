@@ -85,6 +85,59 @@ describe('Token & Cost Transparency Estimator', () => {
     assert.ok(footer.includes('~$0.0006'));
     assert.ok(footer.includes('3.4s'));
     assert.ok(footer.includes('Saved ~$20–50/mo'));
+    assert.ok(footer.includes('Cumulative PR Spend: ~$0.0006 (1 CI Run)'));
+  });
+
+  it('accurately parses cost history from sticky PR markdown comments', async () => {
+    const { parseCostHistory } = await import('../src/metrics/costEstimator.js');
+    const mockComment = `
+## Review Ground
+Some review text
+<!-- reviewground-cost-history: [{"run":1,"commitSha":"5d8e9ac","model":"gemini-3.5-flash-lite","tokens":7420,"costUsd":0.0006}] -->
+<!-- reviewground-code-review -->
+`;
+    const parsed = parseCostHistory(mockComment);
+    assert.strictEqual(parsed.length, 1);
+    assert.strictEqual(parsed[0].run, 1);
+    assert.strictEqual(parsed[0].commitSha, '5d8e9ac');
+    assert.strictEqual(parsed[0].costUsd, 0.0006);
+    assert.strictEqual(parsed[0].tokens, 7420);
+
+    // Gracefully handles empty or non-matching comments
+    assert.deepStrictEqual(parseCostHistory(''), []);
+    assert.deepStrictEqual(parseCostHistory(null), []);
+    assert.deepStrictEqual(parseCostHistory('random comment with no tag'), []);
+  });
+
+  it('tracks cumulative PR spend and renders multi-run breakdown table', async () => {
+    const { generateCostFooter } = await import('../src/metrics/costEstimator.js');
+    const previousHistory = [
+      {
+        run: 1,
+        commitSha: '5d8e9ac',
+        model: 'gemini-3.5-flash-lite',
+        tokens: 7420,
+        costUsd: 0.0008,
+      },
+    ];
+
+    const multiRunFooter = generateCostFooter({
+      provider: 'gemini',
+      model: 'gemini-3.5-flash-lite',
+      diffLength: 25000,
+      responseLength: 8032,
+      latencyMs: 3200,
+      commitSha: '2ba692812345678',
+      previousHistory,
+    });
+
+    assert.ok(multiRunFooter.includes('Cumulative PR Spend: ~$0.0014 (2 CI Runs'));
+    assert.ok(multiRunFooter.includes('Cost History per CI Run (2 runs)'));
+    assert.ok(multiRunFooter.includes('Run #1'));
+    assert.ok(multiRunFooter.includes('`5d8e9ac`'));
+    assert.ok(multiRunFooter.includes('Run #2'));
+    assert.ok(multiRunFooter.includes('`2ba6928`'));
+    assert.ok(multiRunFooter.includes('Total Spend for PR: ~$0.0014'));
   });
 });
 

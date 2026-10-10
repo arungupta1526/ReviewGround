@@ -4,12 +4,25 @@
  * and generates the transparency footer for sticky comments.
  */
 
+export interface CostHistoryEntry {
+  run: number;
+  commitSha?: string;
+  runId?: string;
+  model: string;
+  tokens: number;
+  costUsd: number;
+  timestamp?: string;
+}
+
 export interface CostEstimateInput {
   provider: string;
   model: string;
   diffLength: number;
   responseLength: number;
   latencyMs?: number;
+  commitSha?: string;
+  runId?: string;
+  previousHistory?: CostHistoryEntry[];
 }
 
 /**
@@ -80,8 +93,32 @@ export function resolveCostPerMillion(model: string, provider: string): number {
 }
 
 /**
+ * Parses previous CI run cost history from existing PR sticky comment markdown.
+ */
+export function parseCostHistory(body: string | null | undefined): CostHistoryEntry[] {
+  if (!body) return [];
+  const regex = /<!-- reviewground-cost-history:\s*(\[.*?\])\s*-->/s;
+  const match = body.match(regex);
+  if (!match || !match[1]) return [];
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (e): e is CostHistoryEntry =>
+          typeof e?.run === 'number' &&
+          typeof e?.costUsd === 'number' &&
+          typeof e?.tokens === 'number'
+      );
+    }
+  } catch {
+    // Ignore JSON parsing errors and fall back cleanly
+  }
+  return [];
+}
+
+/**
  * Calculates token usage and estimated cost for an AI code review run,
- * returning a formatted markdown footer string.
+ * tracking cumulative multi-run PR spend and returning a formatted markdown footer string.
  */
 export function generateCostFooter(input: CostEstimateInput): string {
   const inputTokensEst = Math.ceil(input.diffLength / 4);
@@ -93,5 +130,70 @@ export function generateCostFooter(input: CostEstimateInput): string {
   const latencyMs = input.latencyMs ?? 0;
   const latencyStr = latencyMs > 0 ? `${(latencyMs / 1000).toFixed(1)}s` : '—';
 
-  return `\n\n> ⚡ **ReviewGround** | Model: \`${input.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} | Latency: ${latencyStr}  \n> *Saved ~$20–50/mo vs proprietary AI review bots*`;
+  const history: CostHistoryEntry[] = [...(input.previousHistory ?? [])];
+  const shortSha = input.commitSha ? input.commitSha.trim().slice(0, 7) : undefined;
+
+  const currentEntry: CostHistoryEntry = {
+    run: history.length + 1,
+    commitSha: shortSha,
+    runId: input.runId,
+    model: input.model,
+    tokens: totalTokens,
+    costUsd: estimatedCostUsd,
+    timestamp: new Date().toISOString(),
+  };
+
+  // If this exact workflow run ID was already recorded (e.g. re-run or multi-stage update), update it
+  if (input.runId && history.some((h) => h.runId === input.runId)) {
+    const idx = history.findIndex((h) => h.runId === input.runId);
+    history[idx] = {
+      ...history[idx],
+      ...currentEntry,
+      run: history[idx].run,
+    };
+  } else {
+    history.push(currentEntry);
+  }
+
+  const cumulativeCostUsd = history.reduce((sum, h) => sum + h.costUsd, 0);
+  const cumulativeTokens = history.reduce((sum, h) => sum + h.tokens, 0);
+
+  const historyMeta = `\n<!-- reviewground-cost-history: ${JSON.stringify(history)} -->`;
+
+  if (history.length <= 1) {
+    return (
+      `\n\n> ⚡ **ReviewGround** | Model: \`${input.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} | Latency: ${latencyStr}  \n` +
+      `> 💰 **Cumulative PR Spend: ~$${cumulativeCostUsd.toFixed(4)} (1 CI Run)**  \n` +
+      `> *Saved ~$20–50/mo vs proprietary AI review bots*` +
+      historyMeta
+    );
+  }
+
+  // Multiple runs: Render cumulative breakdown table
+  const rows = history
+    .map(
+      (h) =>
+        `| Run #${h.run} | ${h.commitSha ? `\`${h.commitSha}\`` : '—'} | \`${h.model}\` | ${h.tokens.toLocaleString()} | ~$${h.costUsd.toFixed(4)} |`
+    )
+    .join('\n');
+
+  const historyTable =
+    `>\n> <details>\n` +
+    `> <summary>📜 <b>Cost History per CI Run (${history.length} runs)</b></summary>\n>\n` +
+    `> | Run | Commit | Model | Tokens | Cost |\n` +
+    `> |:---|:---|:---|:---|:---|\n` +
+    rows
+      .split('\n')
+      .map((r) => `> ${r}`)
+      .join('\n') +
+    `\n>\n> **Total Spend for PR: ~$${cumulativeCostUsd.toFixed(4)}** *(~99.9% cheaper than proprietary bots)*\n` +
+    `> </details>  \n`;
+
+  return (
+    `\n\n> ⚡ **ReviewGround** | Model: \`${input.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} (This Run) | Latency: ${latencyStr}  \n` +
+    `> 💰 **Cumulative PR Spend: ~$${cumulativeCostUsd.toFixed(4)} (${history.length} CI Runs, ${cumulativeTokens.toLocaleString()} tokens total)**  \n` +
+    historyTable +
+    `> *Saved ~$20–50/mo vs proprietary AI review bots*` +
+    historyMeta
+  );
 }

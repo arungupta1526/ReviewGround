@@ -21114,6 +21114,22 @@ function resolveCostPerMillion(model, provider) {
   const providerKey = (provider || "").toLowerCase().split(" ")[0] ?? "custom";
   return PROVIDER_FALLBACK_COST_PER_M[providerKey] ?? 0.15;
 }
+function parseCostHistory(body) {
+  if (!body) return [];
+  const regex = /<!-- reviewground-cost-history:\s*(\[.*?\])\s*-->/s;
+  const match = body.match(regex);
+  if (!match || !match[1]) return [];
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (e) => typeof e?.run === "number" && typeof e?.costUsd === "number" && typeof e?.tokens === "number"
+      );
+    }
+  } catch {
+  }
+  return [];
+}
 function generateCostFooter(input2) {
   const inputTokensEst = Math.ceil(input2.diffLength / 4);
   const outputTokensEst = Math.ceil(input2.responseLength / 4);
@@ -21122,10 +21138,57 @@ function generateCostFooter(input2) {
   const estimatedCostUsd = totalTokens / 1e6 * costPerM;
   const latencyMs = input2.latencyMs ?? 0;
   const latencyStr = latencyMs > 0 ? `${(latencyMs / 1e3).toFixed(1)}s` : "\u2014";
-  return `
+  const history = [...input2.previousHistory ?? []];
+  const shortSha = input2.commitSha ? input2.commitSha.trim().slice(0, 7) : void 0;
+  const currentEntry = {
+    run: history.length + 1,
+    commitSha: shortSha,
+    runId: input2.runId,
+    model: input2.model,
+    tokens: totalTokens,
+    costUsd: estimatedCostUsd,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (input2.runId && history.some((h) => h.runId === input2.runId)) {
+    const idx = history.findIndex((h) => h.runId === input2.runId);
+    history[idx] = {
+      ...history[idx],
+      ...currentEntry,
+      run: history[idx].run
+    };
+  } else {
+    history.push(currentEntry);
+  }
+  const cumulativeCostUsd = history.reduce((sum, h) => sum + h.costUsd, 0);
+  const cumulativeTokens = history.reduce((sum, h) => sum + h.tokens, 0);
+  const historyMeta = `
+<!-- reviewground-cost-history: ${JSON.stringify(history)} -->`;
+  if (history.length <= 1) {
+    return `
 
 > \u26A1 **ReviewGround** | Model: \`${input2.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} | Latency: ${latencyStr}  
-> *Saved ~$20\u201350/mo vs proprietary AI review bots*`;
+> \u{1F4B0} **Cumulative PR Spend: ~$${cumulativeCostUsd.toFixed(4)} (1 CI Run)**  
+> *Saved ~$20\u201350/mo vs proprietary AI review bots*` + historyMeta;
+  }
+  const rows = history.map(
+    (h) => `| Run #${h.run} | ${h.commitSha ? `\`${h.commitSha}\`` : "\u2014"} | \`${h.model}\` | ${h.tokens.toLocaleString()} | ~$${h.costUsd.toFixed(4)} |`
+  ).join("\n");
+  const historyTable = `>
+> <details>
+> <summary>\u{1F4DC} <b>Cost History per CI Run (${history.length} runs)</b></summary>
+>
+> | Run | Commit | Model | Tokens | Cost |
+> |:---|:---|:---|:---|:---|
+` + rows.split("\n").map((r) => `> ${r}`).join("\n") + `
+>
+> **Total Spend for PR: ~$${cumulativeCostUsd.toFixed(4)}** *(~99.9% cheaper than proprietary bots)*
+> </details>  
+`;
+  return `
+
+> \u26A1 **ReviewGround** | Model: \`${input2.model}\` | Est. Tokens: ${totalTokens.toLocaleString()} | Est. Cost: ~$${estimatedCostUsd.toFixed(4)} (This Run) | Latency: ${latencyStr}  
+> \u{1F4B0} **Cumulative PR Spend: ~$${cumulativeCostUsd.toFixed(4)} (${history.length} CI Runs, ${cumulativeTokens.toLocaleString()} tokens total)**  
+` + historyTable + `> *Saved ~$20\u201350/mo vs proprietary AI review bots*` + historyMeta;
 }
 
 // src/github/comments.ts
@@ -41652,12 +41715,25 @@ ${coverageReport.suggestedTests}`;
   }
   const groundingBadge = response.searchGroundingUsed ? " \u{1F310} *Live Search Grounded*" : "";
   const engineString = `${response.provider} (${response.model})${groundingBadge}`;
+  let previousHistory = [];
+  if (config2.enableCostFooter !== false && token && repo && prNumber) {
+    try {
+      const existingComment = await fetchPrReviewComment(repo, token, prNumber, commentTag);
+      if (existingComment) {
+        previousHistory = parseCostHistory(existingComment);
+      }
+    } catch {
+    }
+  }
   const costFooter = config2.enableCostFooter !== false ? generateCostFooter({
     provider: response.provider,
     model: response.model,
     diffLength: truncatedDiff.length,
     responseLength: response.text.length,
-    latencyMs: response.latencyMs
+    latencyMs: response.latencyMs,
+    commitSha: process.env.GITHUB_SHA,
+    runId: config2.runId || process.env.GITHUB_RUN_ID,
+    previousHistory
   }) : "";
   const markdownOutput = `## \u{1F6E1}\uFE0F ReviewGround AI Code Review & Security Analysis
 *Reviewer Engine: ${engineString}*

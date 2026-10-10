@@ -864,13 +864,25 @@ Enable/disable: `enable-multi-registry-verify: 'true'` (default on).
 
 ---
 
-### 🪙 Feature 4: Token & Cost Transparency Footer
+### 🪙 Feature 4: Token & Cumulative Cost Transparency Footer
 
-Every sticky review comment now includes a transparency stat bar at the bottom:
+Every sticky review comment includes an exact transparency stat bar tracking **both single-run cost and cumulative PR lifecycle spend** across subsequent CI runs:
 
-```
-⚡ ReviewGround | Model: `gemini-3.5-flash-lite` | Est. Tokens: 1,840 | Est. Cost: ~$0.0002 | Latency: 1.2s
-Saved ~$20–50/mo vs proprietary AI review bots
+```markdown
+> ⚡ ReviewGround | Model: `gemini-3.5-flash-lite` | Est. Tokens: 8,258 | Est. Cost: ~$0.0008 (This Run) | Latency: 3.4s
+> 💰 Cumulative PR Spend: ~$0.0014 (2 CI Runs, 15,678 tokens total)
+>
+> <details>
+> <summary>📜 Cost History per CI Run (2 runs)</summary>
+>
+> | Run | Commit | Model | Tokens | Cost |
+> |:---|:---|:---|:---|:---|
+> | Run #1 | `5d8e9ac` | `gemini-3.5-flash-lite` | 7,420 | ~$0.0006 |
+> | Run #2 | `2ba6928` | `gemini-3.5-flash-lite` | 8,258 | ~$0.0008 |
+>
+> Total Spend for PR: ~$0.0014 (~99.9% cheaper than proprietary bots)
+> </details>
+> Saved ~$20–50/mo vs proprietary AI review bots
 ```
 
 Enable/disable: `enable-cost-footer: 'true'` (default on).
