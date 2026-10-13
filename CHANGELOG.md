@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0](https://github.com/arungupta1526/ReviewGround/compare/v1.4.0...v1.5.0) (2026-10-13)
+
+
+### Features
+
+* **ci:** enable conditional concurrency cancellation on non-main branches ([905c33b](https://github.com/arungupta1526/ReviewGround/commit/905c33b74bfdd4dc2c6699c1640da32eaf57c261))
+* **ci:** enable conditional concurrency cancellation on non-main branches ([3d999a8](https://github.com/arungupta1526/ReviewGround/commit/3d999a895da11336c51d061bbb79f81f7ce9621b))
+
 ## [1.4.0](https://github.com/arungupta1526/ReviewGround/compare/v1.3.0...v1.4.0) (2026-10-10)
 
 
