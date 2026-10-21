@@ -91,9 +91,9 @@ inputs:
     default: '0.2'
 
   max-tokens:
-    description: 'Maximum output tokens for the AI review response. Default: 2048'
+    description: 'Maximum output tokens for the AI review response. Default: 8192'
     required: false
-    default: '2048'
+    default: '8192'
 
   review-level:
     description: 'Review depth: "critical" (bugs & security only), "standard" (default — bugs, security, performance), "comprehensive" (all including style & docs)'

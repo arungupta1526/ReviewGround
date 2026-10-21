@@ -50,7 +50,7 @@ export class CustomProvider implements LLMProvider {
             },
           ],
           temperature: options.temperature ?? 0.2,
-          max_tokens: options.maxTokens ?? 2048,
+          max_tokens: options.maxTokens ?? 8192,
         }),
       }, 2, 35000);
 

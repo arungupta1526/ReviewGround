@@ -330,7 +330,7 @@ export async function handleSlashCommand(config: SlashCommandConfig): Promise<vo
     model: config.model,
     fallbackModels: config.fallbackModels,
     temperature: config.temperature ?? 0.2,
-    maxTokens: config.maxTokens ?? 2048,
+    maxTokens: config.maxTokens ?? 8192,
     enableSearchGrounding: config.enableSearchGrounding !== false,
   };
 

@@ -36,7 +36,7 @@ export class AnthropicProvider implements LLMProvider {
     model: string,
     prompt: string,
     temperature = 0.2,
-    maxTokens = 2048
+    maxTokens = 8192
   ): Promise<string | null> {
     const url = 'https://api.anthropic.com/v1/messages';
     try {

@@ -28,7 +28,7 @@ export class OpenRouterProvider implements LLMProvider {
     model: string,
     prompt: string,
     temperature = 0.2,
-    maxTokens = 2048
+    maxTokens = 8192
   ): Promise<string | null> {
     const url = `${this.baseUrl}/chat/completions`;
     try {

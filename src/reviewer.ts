@@ -23,7 +23,7 @@ import {
 } from './utils/actionableSummary.js';
 import { estimateReviewEffort } from './utils/effortEstimator.js';
 import { generatePreMergeChecksBox } from './utils/preMergeChecks.js';
-import { sanitizeMermaidInMarkdown } from './utils/mermaidSanitizer.js';
+import { sanitizeMermaidInMarkdown, ensureBalancedCodeFences } from './utils/mermaidSanitizer.js';
 import {
   DEFAULT_COMMENT_TAG,
   CI_SECTION_HEADER,
@@ -351,10 +351,17 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     } catch {
       console.warn('ℹ️ Could not parse inline_suggestions JSON block from AI output.');
     }
+  } else {
+    // If inline_suggestions block was opened but left unclosed due to token limit, strip it
+    const unclosedSuggestionRegex = /```inline_suggestions\s*([\s\S]*)$/;
+    if (unclosedSuggestionRegex.test(cleanReviewText)) {
+      cleanReviewText = cleanReviewText.replace(unclosedSuggestionRegex, '').trim();
+    }
   }
 
-  // Auto-heal Mermaid diagrams to prevent GitHub syntax parse errors
+  // Auto-heal Mermaid diagrams and unclosed code fences to prevent GitHub rendering errors
   cleanReviewText = sanitizeMermaidInMarkdown(cleanReviewText);
+  cleanReviewText = ensureBalancedCodeFences(cleanReviewText);
 
   // Test coverage detection
   let testCoverageSection = '';
