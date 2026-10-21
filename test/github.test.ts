@@ -109,12 +109,13 @@ Some review text
     assert.deepStrictEqual(parseCostHistory('random comment with no tag'), []);
   });
 
-  it('tracks cumulative PR spend and renders multi-run breakdown table', async () => {
+  it('tracks cumulative PR spend and renders multi-run breakdown table with Actions run links', async () => {
     const { generateCostFooter } = await import('../src/metrics/costEstimator.js');
     const previousHistory = [
       {
         run: 1,
         commitSha: '5d8e9ac',
+        runId: '10001',
         model: 'gemini-3.5-flash-lite',
         tokens: 7420,
         costUsd: 0.0008,
@@ -128,16 +129,39 @@ Some review text
       responseLength: 8032,
       latencyMs: 3200,
       commitSha: '2ba692812345678',
+      runId: '10002',
+      repo: 'test-owner/test-repo',
       previousHistory,
     });
 
     assert.ok(multiRunFooter.includes('Cumulative PR Spend: ~$0.0014 (2 CI Runs'));
     assert.ok(multiRunFooter.includes('Cost History per CI Run (2 runs)'));
-    assert.ok(multiRunFooter.includes('Run #1'));
+    assert.ok(multiRunFooter.includes('[Run #1](https://github.com/test-owner/test-repo/actions/runs/10001)'));
     assert.ok(multiRunFooter.includes('`5d8e9ac`'));
-    assert.ok(multiRunFooter.includes('Run #2'));
+    assert.ok(multiRunFooter.includes('[Run #2](https://github.com/test-owner/test-repo/actions/runs/10002)'));
     assert.ok(multiRunFooter.includes('`2ba6928`'));
     assert.ok(multiRunFooter.includes('Total Spend for PR: ~$0.0014'));
+
+    // When runId or repo is omitted, escapes the hash with HTML entity to prevent accidental PR autolinking
+    const fallbackFooter = generateCostFooter({
+      provider: 'gemini',
+      model: 'gemini-3.5-flash-lite',
+      diffLength: 25000,
+      responseLength: 8032,
+      latencyMs: 3200,
+      commitSha: '2ba692812345678',
+      previousHistory: [
+        {
+          run: 1,
+          commitSha: '5d8e9ac',
+          model: 'gemini-3.5-flash-lite',
+          tokens: 7420,
+          costUsd: 0.0008,
+        },
+      ],
+    });
+    assert.ok(fallbackFooter.includes('Run &#35;1'));
+    assert.ok(fallbackFooter.includes('Run &#35;2'));
   });
 });
 
