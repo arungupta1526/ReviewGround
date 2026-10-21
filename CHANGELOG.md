@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0](https://github.com/arungupta1526/ReviewGround/compare/v1.5.0...v1.6.0) (2026-10-21)
+
+
+### Features
+
+* **comments:** add configurable sticky-comment toggle for commit-by-commit timeline ([5ebacae](https://github.com/arungupta1526/ReviewGround/commit/5ebacae12bb214b4a13466a72279b723abceb537))
+
+
+### Bug Fixes
+
+* **metrics:** link CI run numbers to GitHub Actions runs and escape hash fallback ([4840f45](https://github.com/arungupta1526/ReviewGround/commit/4840f45c6442ae5b7ff3af7a17cfa0b6812c66f0))
+* **metrics:** link CI run numbers to GitHub Actions runs and escape hash fallback ([d1ff08c](https://github.com/arungupta1526/ReviewGround/commit/d1ff08c026b94b5dffe5f29e81ff15d3ce58c4fa))
+* **reviewer:** auto-heal LLM arrow syntax glitches in Mermaid sequence diagrams ([b46996e](https://github.com/arungupta1526/ReviewGround/commit/b46996e609c4f548b248c0b2be135672a3d09e0d))
+* **reviewer:** auto-heal LLM arrow syntax glitches in Mermaid sequence diagrams ([ca623b1](https://github.com/arungupta1526/ReviewGround/commit/ca623b17e74a392809f4e24eec857b46f8e5b46a))
+* **reviewer:** heal unclosed Mermaid blocks and raise max-tokens headroom for thinking models ([6fd1364](https://github.com/arungupta1526/ReviewGround/commit/6fd1364a9dc6fa416a9ce5ef585e58a908c282a8))
+* **reviewer:** heal unclosed Mermaid blocks and raise max-tokens headroom for thinking models ([f611ffa](https://github.com/arungupta1526/ReviewGround/commit/f611ffa0d094f2d16c488ba3b8a3fdfa88b51346))
+* **summary:** prevent markdown backtick collision in ai agent prompt box ([8c8b02d](https://github.com/arungupta1526/ReviewGround/commit/8c8b02dfcfeada476f2ba47d535eab19a067b950))
+* **summary:** resolve prompt box markdown collision & feat(comments): add sticky-comment toggle ([38378b5](https://github.com/arungupta1526/ReviewGround/commit/38378b5b8f27980b6e20270963dac566a8afa750))
+
 ## [1.5.0](https://github.com/arungupta1526/ReviewGround/compare/v1.4.0...v1.5.0) (2026-10-19)
 
 
