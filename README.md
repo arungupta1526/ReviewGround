@@ -205,7 +205,7 @@ ReviewGround is designed with **zero-boilerplate ergonomics**. Over 80% of intel
 | **Missing Test Detector**    |  `enable-test-coverage-check: 'true'`  | Flags newly exported functions lacking unit tests and suggests stubs              |
 | **Token & Cost Footer**      |      `enable-cost-footer: 'true'`      | Shows single-run tokens, USD cost, latency, and cumulative PR spend               |
 | **Deterministic Sampling**   |          `temperature: '0.2'`          | Low variance, highly deterministic code reviews                                   |
-| **Output Token Limit**       |          `max-tokens: '2048'`          | Cost-effective response bounds preventing runaway token costs                     |
+| **Output Token Limit**       |          `max-tokens: '8192'`          | Generous response bounds preventing truncation during thinking/diagram generation |
 | **Base Comparison Branch**   |         `base-branch: 'main'`          | Automatically calculates diff against base `main` branch                          |
 | **Review Language**          |        `review-language: 'en'`         | English language review output by default                                         |
 | **Actionable Findings Banner**|              Built-in                  | Top-level summary badge highlighting Blockers, Warnings, and Committable Suggestions|
@@ -556,7 +556,7 @@ jobs:
           review-level: "standard" # 'critical' | 'standard' (default) | 'comprehensive'
           review-language: "en" # BCP-47 language code e.g. 'en', 'ja', 'es', 'de', 'zh'
           temperature: "0.2" # Sampling temperature 0.0–1.0 (default: '0.2')
-          max-tokens: "2048" # Max response token length (default: '2048')
+          max-tokens: "8192" # Max response token length (default: '8192')
           ignore-patterns: "" # Comma-separated globs e.g. 'dist/**,*.min.js'
 
           # ── Grounding & Inline Suggestions ───────────────
@@ -919,7 +919,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Audit Result**             | `audit-result`                    | `AUDIT_RESULT`                                                       |               — (e.g. `${{ needs.security-audit.result }}`) — rendered in CI summary table               |
 | **Base Branch**              | `base-branch`                     | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH`                            |                                                  `main`                                                  |
 | **LLM Temperature**          | `temperature`                     | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE`                        |                                                  `0.2`                                                   |
-| **Max Tokens**               | `max-tokens`                      | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS`                          |                                                  `2048`                                                  |
+| **Max Tokens**               | `max-tokens`                      | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS`                          |                                                  `8192`                                                  |
 | **Review Level**             | `review-level`                    | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL`                          |                         `standard` (`critical` \| `standard` \| `comprehensive`)                         |
 | **Ignore Patterns**          | `ignore-patterns`                 | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS`                    |                            — (comma-separated globs e.g. `dist/**,*.min.js`)                             |
 | **Review Language**          | `review-language`                 | `REVIEWGROUND_REVIEW_LANGUAGE`, `REVIEW_LANGUAGE`                    |                              `en` (e.g. `ja`, `es`, `de`, `zh`, `pt`, `fr`)                              |

@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { sanitizeSequenceDiagram, sanitizeMermaidInMarkdown } from '../src/utils/mermaidSanitizer.js';
+import {
+  sanitizeSequenceDiagram,
+  sanitizeMermaidInMarkdown,
+  ensureBalancedCodeFences,
+} from '../src/utils/mermaidSanitizer.js';
 
 describe('Mermaid Diagram Sanitizer & Glitch Auto-Healer', () => {
   it('heals hallucinated words inside dotted return arrows (--yminus->>)', () => {
@@ -91,5 +95,54 @@ Some other text.`;
     const plain = '# Review\nEverything is clean.';
     assert.strictEqual(sanitizeMermaidInMarkdown(plain), plain);
     assert.strictEqual(sanitizeMermaidInMarkdown(''), '');
+  });
+
+  it('heals unclosed mermaid block when aborted without arrows (YouPI-PG PR #16 regression test)', () => {
+    const raw = `This PR implements a critical architectural shift by enforcing the Verification Pipeline.
+
+### Architectural Sequence
+The following diagram illustrates the unified verification flow for both Poller and Android SMS ingest points:
+
+\`\`\`mermaid
+sequenceDiagram
+    participant O as Observer`;
+
+    const healed = sanitizeMermaidInMarkdown(raw);
+    // Unclosed block with no interactions should be stripped along with the dangling header
+    assert.strictEqual(healed.includes('```mermaid'), false);
+    assert.strictEqual(healed.includes('Architectural Sequence'), false);
+    assert.ok(healed.includes('This PR implements a critical architectural shift'));
+  });
+
+  it('heals unclosed mermaid block when truncated with valid interactions and closes fence', () => {
+    const raw = `### Architectural Sequence
+
+\`\`\`mermaid
+sequenceDiagram
+    Client->>API: POST /verify
+    API->>DB: Query session
+    DB--yminus->>API: Return state
+    API-->>Client: 200 OK
+    API->>`;
+
+    const healed = sanitizeMermaidInMarkdown(raw);
+    assert.ok(healed.includes('```mermaid'));
+    assert.ok(healed.includes('DB-->>API: Return state'));
+    assert.ok(healed.includes('API-->>Client: 200 OK'));
+    assert.strictEqual(healed.includes('yminus'), false);
+    // Dangling trailing incomplete line "API->>" should be pruned
+    assert.strictEqual(healed.includes('API->>\n```'), false);
+    // Should be properly closed
+    assert.ok(healed.endsWith('```'));
+  });
+
+  it('ensures unclosed code fences are properly closed with ensureBalancedCodeFences', () => {
+    const oddFences = 'Some text\n```typescript\nconst x = 1;';
+    const balanced = ensureBalancedCodeFences(oddFences);
+    assert.ok(balanced.endsWith('```\n'));
+    assert.strictEqual((balanced.match(/```/g) || []).length % 2, 0);
+
+    const alreadyBalanced = '```json\n{"a": 1}\n```';
+    assert.strictEqual(ensureBalancedCodeFences(alreadyBalanced), alreadyBalanced);
   });
 });

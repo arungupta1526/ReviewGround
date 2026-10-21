@@ -26,7 +26,7 @@ export class GroqProvider implements LLMProvider {
     model: string,
     prompt: string,
     temperature = 0.2,
-    maxTokens = 2048
+    maxTokens = 8192
   ): Promise<{ text: string | null; reasoning?: string }> {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     const safePrompt =

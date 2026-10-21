@@ -42,7 +42,7 @@ export class GeminiProvider implements LLMProvider {
     prompt: string,
     withTools: boolean,
     temperature = 0.2,
-    maxTokens = 2048
+    maxTokens = 8192
   ): Promise<{ text: string | null; searchUsed: boolean }> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
     const requestBody: Record<string, unknown> = {

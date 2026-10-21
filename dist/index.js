@@ -19596,7 +19596,7 @@ var GeminiProvider = class {
   isConfigured() {
     return this.apiKey.length > 0;
   }
-  async callModel(model, prompt, withTools, temperature = 0.2, maxTokens = 2048) {
+  async callModel(model, prompt, withTools, temperature = 0.2, maxTokens = 8192) {
     const url2 = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
@@ -19685,7 +19685,7 @@ var OpenAIProvider = class {
   isConfigured() {
     return this.apiKey.length > 0;
   }
-  async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
+  async callModel(model, prompt, temperature = 0.2, maxTokens = 8192) {
     const url2 = `${this.baseUrl}/chat/completions`;
     try {
       const res = await fetchWithRetry(url2, {
@@ -19764,7 +19764,7 @@ var AnthropicProvider = class {
   isConfigured() {
     return this.apiKey.length > 0;
   }
-  async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
+  async callModel(model, prompt, temperature = 0.2, maxTokens = 8192) {
     const url2 = "https://api.anthropic.com/v1/messages";
     try {
       const res = await fetchWithRetry(url2, {
@@ -19843,7 +19843,7 @@ var GroqProvider = class {
   isConfigured() {
     return this.apiKey.length > 0;
   }
-  async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
+  async callModel(model, prompt, temperature = 0.2, maxTokens = 8192) {
     const url2 = "https://api.groq.com/openai/v1/chat/completions";
     const safePrompt = prompt.length > 16e3 ? (() => {
       console.warn(
@@ -19931,7 +19931,7 @@ var DeepSeekProvider = class {
   isConfigured() {
     return this.apiKey.length > 0;
   }
-  async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
+  async callModel(model, prompt, temperature = 0.2, maxTokens = 8192) {
     const url2 = `${this.baseUrl}/chat/completions`;
     try {
       const res = await fetchWithRetry(url2, {
@@ -20016,7 +20016,7 @@ var OpenRouterProvider = class {
   isConfigured() {
     return this.apiKey.length > 0;
   }
-  async callModel(model, prompt, temperature = 0.2, maxTokens = 2048) {
+  async callModel(model, prompt, temperature = 0.2, maxTokens = 8192) {
     const url2 = `${this.baseUrl}/chat/completions`;
     try {
       const res = await fetchWithRetry(url2, {
@@ -20122,7 +20122,7 @@ var CustomProvider = class {
             }
           ],
           temperature: options.temperature ?? 0.2,
-          max_tokens: options.maxTokens ?? 2048
+          max_tokens: options.maxTokens ?? 8192
         })
       }, 2, 35e3);
       if (!res.ok) {
@@ -20905,7 +20905,7 @@ async function runPrDescribe(config2) {
     model: config2.model,
     fallbackModels: config2.fallbackModels,
     temperature: config2.temperature ?? 0.2,
-    maxTokens: config2.maxTokens ?? 2048,
+    maxTokens: config2.maxTokens ?? 8192,
     enableSearchGrounding: config2.enableSearchGrounding !== false
   };
   console.log(`\u{1F916} [Describe] Generating PR description & walkthrough via ${providerManager.getConfiguredProviders()[0]?.name}...`);
@@ -21649,8 +21649,9 @@ ${rows}
 // src/utils/mermaidSanitizer.ts
 function sanitizeSequenceDiagram(text) {
   const lines = text.split("\n");
-  const sanitizedLines = lines.map((line) => {
-    let cleaned = line;
+  const sanitizedLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    let cleaned = lines[i];
     cleaned = cleaned.replace(/--[a-zA-Z0-9_]+->>/g, "-->>");
     cleaned = cleaned.replace(/(?<!-)-[a-zA-Z0-9_]+->>/g, "->>");
     cleaned = cleaned.replace(/--[a-zA-Z0-9_]+-->/g, "-->");
@@ -21658,15 +21659,48 @@ function sanitizeSequenceDiagram(text) {
     cleaned = cleaned.replace(/--\s+>>/g, "-->>");
     cleaned = cleaned.replace(/(?<!-)-\s+>>/g, "->>");
     cleaned = cleaned.replace(/->\s+>/g, "->>");
-    return cleaned;
-  });
+    sanitizedLines.push(cleaned);
+  }
+  while (sanitizedLines.length > 0) {
+    const last = sanitizedLines[sanitizedLines.length - 1].trim();
+    if (last === "" || /(?:->>|-->>|->|-->|-\))\s*$/.test(last) || /[-=]>$/.test(last)) {
+      sanitizedLines.pop();
+    } else {
+      break;
+    }
+  }
   return sanitizedLines.join("\n");
+}
+function healUnclosedMermaid(markdown) {
+  if (!markdown || !markdown.includes("```mermaid")) {
+    return markdown;
+  }
+  const unclosedMatch = markdown.match(/```mermaid\s*((?:(?!```)[\s\S])*)$/);
+  if (!unclosedMatch) {
+    return markdown;
+  }
+  const diagramBody = unclosedMatch[1] || "";
+  const hasArrows = /->>|-->>|->|-->|-\)/.test(diagramBody);
+  if (!hasArrows) {
+    const beforeDiagram = markdown.slice(0, unclosedMatch.index).trimEnd();
+    const cleanedBefore = beforeDiagram.replace(
+      /###?\s*(?:Architectural\s+Sequence|Workflow\s+Visualization|Architecture\s+&\s+Workflow|Sequence\s+Diagram)[^\n]*\n*(?:[^\n]*diagram[^\n]*\n*)?$/i,
+      ""
+    ).trimEnd();
+    return cleanedBefore;
+  }
+  const sanitizedBody = sanitizeSequenceDiagram(diagramBody).trim();
+  const before = markdown.slice(0, unclosedMatch.index);
+  return `${before}\`\`\`mermaid
+${sanitizedBody}
+\`\`\``;
 }
 function sanitizeMermaidInMarkdown(markdown) {
   if (!markdown || !markdown.includes("```mermaid")) {
     return markdown;
   }
-  return markdown.replace(/```mermaid\s*([\s\S]*?)```/g, (_fullMatch, diagramBody) => {
+  let healed = healUnclosedMermaid(markdown);
+  healed = healed.replace(/```mermaid\s*([\s\S]*?)```/g, (_fullMatch, diagramBody) => {
     let sanitized = diagramBody;
     if (sanitized.includes("sequenceDiagram")) {
       sanitized = sanitizeSequenceDiagram(sanitized);
@@ -21675,6 +21709,17 @@ function sanitizeMermaidInMarkdown(markdown) {
 ${sanitized.trim()}
 \`\`\``;
   });
+  return healed;
+}
+function ensureBalancedCodeFences(markdown) {
+  if (!markdown) return markdown;
+  const matches = markdown.match(/```/g);
+  if (matches && matches.length % 2 !== 0) {
+    return `${markdown.trimEnd()}
+\`\`\`
+`;
+  }
+  return markdown;
 }
 
 // src/github/comments.ts
@@ -42283,8 +42328,14 @@ ${registryResult.notes.map((n) => `- ${n}`).join("\n")}
     } catch {
       console.warn("\u2139\uFE0F Could not parse inline_suggestions JSON block from AI output.");
     }
+  } else {
+    const unclosedSuggestionRegex = /```inline_suggestions\s*([\s\S]*)$/;
+    if (unclosedSuggestionRegex.test(cleanReviewText)) {
+      cleanReviewText = cleanReviewText.replace(unclosedSuggestionRegex, "").trim();
+    }
   }
   cleanReviewText = sanitizeMermaidInMarkdown(cleanReviewText);
+  cleanReviewText = ensureBalancedCodeFences(cleanReviewText);
   let testCoverageSection = "";
   let coverageReport = null;
   if (config2.enableTestCoverageCheck !== false) {
@@ -42841,7 +42892,7 @@ async function handleSlashCommand(config2) {
     model: config2.model,
     fallbackModels: config2.fallbackModels,
     temperature: config2.temperature ?? 0.2,
-    maxTokens: config2.maxTokens ?? 2048,
+    maxTokens: config2.maxTokens ?? 8192,
     enableSearchGrounding: config2.enableSearchGrounding !== false
   };
   const [rawDiff, originalReview] = await Promise.all([

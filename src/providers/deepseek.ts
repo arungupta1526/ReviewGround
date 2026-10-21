@@ -23,7 +23,7 @@ export class DeepSeekProvider implements LLMProvider {
     model: string,
     prompt: string,
     temperature = 0.2,
-    maxTokens = 2048
+    maxTokens = 8192
   ): Promise<{ text: string | null; reasoning?: string }> {
     const url = `${this.baseUrl}/chat/completions`;
     try {
