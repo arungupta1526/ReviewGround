@@ -21189,9 +21189,12 @@ function generateCostFooter(input2) {
 > \u{1F4B0} **Cumulative PR Spend: ~$${cumulativeCostUsd.toFixed(4)} (1 CI Run)**  
 > *Saved ~$20\u201350/mo vs proprietary AI review bots*` + historyMeta;
   }
-  const rows = history.map(
-    (h) => `| Run #${h.run} | ${h.commitSha ? `\`${h.commitSha}\`` : "\u2014"} | \`${h.model}\` | ${h.tokens.toLocaleString()} | ~$${h.costUsd.toFixed(4)} |`
-  ).join("\n");
+  const repo = input2.repo || process.env.GITHUB_REPOSITORY;
+  const rows = history.map((h) => {
+    const runLabel = h.runId && repo ? `[Run #${h.run}](https://github.com/${repo}/actions/runs/${h.runId})` : `Run &#35;${h.run}`;
+    const commitLabel = h.commitSha ? `\`${h.commitSha}\`` : "\u2014";
+    return `| ${runLabel} | ${commitLabel} | \`${h.model}\` | ${h.tokens.toLocaleString()} | ~$${h.costUsd.toFixed(4)} |`;
+  }).join("\n");
   const historyTable = `>
 > <details>
 > <summary>\u{1F4DC} <b>Cost History per CI Run (${history.length} runs)</b></summary>
@@ -42370,6 +42373,7 @@ ${coverageReport.suggestedTests}`;
     latencyMs: response.latencyMs,
     commitSha: process.env.GITHUB_SHA,
     runId: config2.runId || process.env.GITHUB_RUN_ID,
+    repo: config2.repo || process.env.GITHUB_REPOSITORY,
     previousHistory
   }) : "";
   const findingCounts = extractFindingCounts(cleanReviewText, inlineSuggestions.length);

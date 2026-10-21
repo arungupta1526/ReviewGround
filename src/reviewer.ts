@@ -399,6 +399,7 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
         latencyMs: response.latencyMs,
         commitSha: process.env.GITHUB_SHA,
         runId: config.runId || process.env.GITHUB_RUN_ID,
+        repo: config.repo || process.env.GITHUB_REPOSITORY,
         previousHistory,
       })
     : '';

@@ -22,6 +22,7 @@ export interface CostEstimateInput {
   latencyMs?: number;
   commitSha?: string;
   runId?: string;
+  repo?: string;
   previousHistory?: CostHistoryEntry[];
 }
 
@@ -169,12 +170,18 @@ export function generateCostFooter(input: CostEstimateInput): string {
     );
   }
 
+  const repo = input.repo || process.env.GITHUB_REPOSITORY;
+
   // Multiple runs: Render cumulative breakdown table
   const rows = history
-    .map(
-      (h) =>
-        `| Run #${h.run} | ${h.commitSha ? `\`${h.commitSha}\`` : '—'} | \`${h.model}\` | ${h.tokens.toLocaleString()} | ~$${h.costUsd.toFixed(4)} |`
-    )
+    .map((h) => {
+      const runLabel =
+        h.runId && repo
+          ? `[Run #${h.run}](https://github.com/${repo}/actions/runs/${h.runId})`
+          : `Run &#35;${h.run}`;
+      const commitLabel = h.commitSha ? `\`${h.commitSha}\`` : '—';
+      return `| ${runLabel} | ${commitLabel} | \`${h.model}\` | ${h.tokens.toLocaleString()} | ~$${h.costUsd.toFixed(4)} |`;
+    })
     .join('\n');
 
   const historyTable =
