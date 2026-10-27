@@ -42480,7 +42480,7 @@ ${coverageReport.suggestedTests}`;
     diffLength: truncatedDiff.length,
     responseLength: response.text.length,
     latencyMs: response.latencyMs,
-    commitSha: process.env.GITHUB_SHA,
+    commitSha: config2.commitSha || process.env.COMMIT_SHA || process.env.GITHUB_SHA,
     runId: config2.runId || process.env.GITHUB_RUN_ID,
     repo: config2.repo || process.env.GITHUB_REPOSITORY,
     previousHistory
@@ -42526,7 +42526,7 @@ ${cleanReviewText}${preMergeChecksBox}${testCoverageSection}${agentPromptBox}${r
     commentTag,
     config2.stickyComment !== false,
     {
-      commitSha: process.env.GITHUB_SHA,
+      commitSha: config2.commitSha || process.env.COMMIT_SHA || process.env.GITHUB_SHA,
       runId: config2.runId || process.env.GITHUB_RUN_ID
     }
   );
@@ -43103,6 +43103,20 @@ function resolvePrNumber() {
   }
   return "";
 }
+function resolveCommitSha() {
+  const inputSha = getOptionalInput("commit-sha", ["COMMIT_SHA"]);
+  if (inputSha) return inputSha;
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (eventPath && fs8.existsSync(eventPath)) {
+    try {
+      const eventData = JSON.parse(fs8.readFileSync(eventPath, "utf-8"));
+      const headSha = eventData.pull_request?.head?.sha;
+      if (headSha) return String(headSha);
+    } catch {
+    }
+  }
+  return process.env.GITHUB_SHA || "";
+}
 async function run() {
   try {
     const token = getOptionalInput("github-token", ["GITHUB_TOKEN", "GH_TOKEN"]);
@@ -43201,10 +43215,12 @@ async function run() {
       console.log("\n\u2728 ReviewGround PR description completed.");
       return;
     }
+    const commitSha = resolveCommitSha();
     const baseConfig = {
       githubToken: token,
       repo,
       prNumber,
+      commitSha: commitSha || void 0,
       commentTag: getOptionalInput("comment-tag", ["REVIEWGROUND_COMMENT_TAG", "COMMENT_TAG"]) || void 0,
       stickyComment: getBooleanInput("sticky-comment", ["REVIEWGROUND_STICKY_COMMENT", "STICKY_COMMENT"], true),
       runId: getOptionalInput("run-id", ["GITHUB_RUN_ID", "RUN_ID"]) || void 0
@@ -43278,8 +43294,7 @@ async function run() {
         auditResult: getOptionalInput("audit-result", ["AUDIT_RESULT"]) || void 0,
         buildResult: getOptionalInput("build-result", ["BUILD_RESULT"]) || void 0,
         testResult: getOptionalInput("test-result", ["TEST_RESULT"]) || void 0,
-        extraStages: getOptionalInput("extra-stages", ["REVIEWGROUND_EXTRA_STAGES", "EXTRA_STAGES"]) || void 0,
-        commitSha: getOptionalInput("commit-sha", ["COMMIT_SHA", "GITHUB_SHA"]) || process.env.GITHUB_SHA || void 0
+        extraStages: getOptionalInput("extra-stages", ["REVIEWGROUND_EXTRA_STAGES", "EXTRA_STAGES"]) || void 0
       };
       console.log("\n--- \u{1F4CA} Starting Post-CI Summary ---");
       const summaryMarkdown = await runSummary(summaryConfig);
