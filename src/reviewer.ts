@@ -440,7 +440,18 @@ ${cleanReviewText}${preMergeChecksBox}${testCoverageSection}${agentPromptBox}${r
   }
 
   // Post / Update Sticky PR Comment & Suggestions
-  await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag, config.stickyComment !== false);
+  await postOrUpdatePrComment(
+    markdownOutput,
+    token,
+    repo,
+    prNumber,
+    commentTag,
+    config.stickyComment !== false,
+    {
+      commitSha: process.env.GITHUB_SHA,
+      runId: config.runId || process.env.GITHUB_RUN_ID,
+    }
+  );
 
   if (config.enablePruneInlineSuggestions && token && repo && prNumber) {
     await prunePreviousInlineComments(repo, token, prNumber);

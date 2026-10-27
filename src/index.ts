@@ -278,6 +278,7 @@ async function run(): Promise<void> {
         buildResult: getOptionalInput('build-result', ['BUILD_RESULT']) || undefined,
         testResult: getOptionalInput('test-result', ['TEST_RESULT']) || undefined,
         extraStages: getOptionalInput('extra-stages', ['REVIEWGROUND_EXTRA_STAGES', 'EXTRA_STAGES']) || undefined,
+        commitSha: getOptionalInput('commit-sha', ['COMMIT_SHA', 'GITHUB_SHA']) || process.env.GITHUB_SHA || undefined,
       };
 
       console.log('\n--- 📊 Starting Post-CI Summary ---');

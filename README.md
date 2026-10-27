@@ -929,6 +929,7 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Extra CI Stages**          | `extra-stages`                    | `REVIEWGROUND_EXTRA_STAGES`, `EXTRA_STAGES`                          |                        — JSON array e.g. `[{"name":"Deploy","result":"success"}]`                        |
 | **Comment Tag**              | `comment-tag`                     | `REVIEWGROUND_COMMENT_TAG`, `COMMENT_TAG`                            |                                   `<!-- reviewground-code-review -->`                                    |
 | **Sticky Comment**           | `sticky-comment`                  | `REVIEWGROUND_STICKY_COMMENT`, `STICKY_COMMENT`                      |                      `true` — in-place comment update (`false` for new comment per commit)                       |
+| **Commit SHA**               | `commit-sha`                      | `COMMIT_SHA`, `GITHUB_SHA`                                           |                          — auto-detected from `GITHUB_SHA` (associates CI & review status)                       |
 
 ### Action Outputs
 

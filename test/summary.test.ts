@@ -96,4 +96,20 @@ describe('CI Summary & Duration Tracking', () => {
     assert.ok(md.includes('| 🧪 **3. Playwright E2E** | ❌ Failed | `45s` | [View Logs](https://github.com/runs/1/job/3) |'));
     assert.ok(md.includes('❌ **CI Pipeline failed at: Playwright E2E.**'));
   });
+
+  it('renders commit SHA badge in CI summary table when commitSha is provided', () => {
+    const md = buildCiSummaryMarkdown(
+      'success',
+      'success',
+      'success',
+      'success',
+      { build: '10s' },
+      '999888',
+      'owner/repo',
+      undefined,
+      'abcdef123456789'
+    );
+
+    assert.ok(md.includes('> 📌 **Commit:** `abcdef1` · **Run:** [Run &#35;999888](https://github.com/owner/repo/actions/runs/999888)'));
+  });
 });
