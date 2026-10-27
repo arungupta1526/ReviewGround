@@ -61,26 +61,29 @@ export type SlashCommandType =
  */
 export function extractChatQuery(commentBody: string): string {
   return commentBody
-    .replace(/@reviewground\s*(ask)?/i, '')
-    .replace(/\/review\s+ask/i, '')
+    .trim()
+    .replace(/^@(?:reviewground|review)\s*(?:ask)?\s*/i, '')
+    .replace(/^\/review\s+ask\s*/i, '')
     .trim();
 }
 
 /**
  * Parses a PR comment body to extract a recognized ReviewGround slash command.
+ * Commands must appear at the beginning of the comment to prevent accidental
+ * triggers when bot handles are mentioned casually in PR discussions.
  */
 export function parseSlashCommand(commentBody: string): SlashCommandType {
   const text = commentBody.trim();
 
-  if (/@reviewground\s+explain/i.test(text)) return 'explain';
-  if (/@reviewground\s+fix/i.test(text)) return 'fix';
-  if (/\/review\s+full/i.test(text)) return 'review-full';
-  if (/\/review\s+security/i.test(text)) return 'review-security';
-  if (/\/review\s+performance/i.test(text)) return 'review-performance';
-  if (/\/review\s+standard/i.test(text)) return 'review-standard';
-  if (/\/review\s+ask\b/i.test(text)) return 'chat';
-  if (/@reviewground\b/i.test(text)) return 'chat';
-  if (/\/review\b/i.test(text)) return 'review-standard';
+  if (/^@(?:reviewground|review)\s+explain\b/i.test(text)) return 'explain';
+  if (/^@(?:reviewground|review)\s+fix\b/i.test(text)) return 'fix';
+  if (/^\/review\s+full\b/i.test(text)) return 'review-full';
+  if (/^\/review\s+security\b/i.test(text)) return 'review-security';
+  if (/^\/review\s+performance\b/i.test(text)) return 'review-performance';
+  if (/^\/review\s+standard\b/i.test(text)) return 'review-standard';
+  if (/^\/review\s+ask\b/i.test(text)) return 'chat';
+  if (/^@(?:reviewground|review)\b/i.test(text)) return 'chat';
+  if (/^\/review\b/i.test(text)) return 'review-standard';
 
   return null;
 }

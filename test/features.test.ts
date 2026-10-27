@@ -170,12 +170,13 @@ index 0000000..1111111 100644
 describe('Slash Command Parser (Feature 1)', () => {
   it('parses @reviewground explain command', () => {
     assert.strictEqual(parseSlashCommand('@reviewground explain'), 'explain');
-    assert.strictEqual(parseSlashCommand('Could you please @reviewground explain why?'), 'explain');
+    assert.strictEqual(parseSlashCommand('@review explain'), 'explain');
     assert.strictEqual(parseSlashCommand('@ReviewGround EXPLAIN'), 'explain');
   });
 
   it('parses @reviewground fix command', () => {
     assert.strictEqual(parseSlashCommand('@reviewground fix'), 'fix');
+    assert.strictEqual(parseSlashCommand('@review fix'), 'fix');
     assert.strictEqual(parseSlashCommand('@reviewground fix this issue'), 'fix');
   });
 
@@ -195,11 +196,17 @@ describe('Slash Command Parser (Feature 1)', () => {
     assert.strictEqual(parseSlashCommand('/review'), 'review-standard');
   });
 
-  it('returns null for unrecognized comments', () => {
+  it('returns null for unrecognized comments or mid-sentence mentions', () => {
     assert.strictEqual(parseSlashCommand('LGTM'), null);
     assert.strictEqual(parseSlashCommand('Nice work!'), null);
     assert.strictEqual(parseSlashCommand('reviewground'), null);
     assert.strictEqual(parseSlashCommand(''), null);
+    assert.strictEqual(parseSlashCommand('Could you please @reviewground explain why?'), null);
+    assert.strictEqual(
+      parseSlashCommand('Bhai maine @reviewground ka suggestion check kiya, wo valid nahi lag raha.'),
+      null
+    );
+    assert.strictEqual(parseSlashCommand('I think @reviewground made a mistake here'), null);
   });
 
   it('is case-insensitive', () => {
