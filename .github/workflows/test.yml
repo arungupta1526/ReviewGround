@@ -24,6 +24,50 @@ concurrency:
 
 jobs:
   # =============================================================
+  # Stage 0: Instant AI Review & In-Progress Tracking
+  # =============================================================
+  reviewground-review:
+    name: 🛡️ Instant AI Review & In-Progress
+    if: github.actor != 'dependabot[bot]' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run ReviewGround AI Review
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: review
+          enable-pr-description-update: 'true'
+          enable-check-run: 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+
+  # =============================================================
   # Stage 1: Secret Leak Detection
   # =============================================================
   gitleaks:
@@ -116,10 +160,10 @@ jobs:
         run: npm test
 
   # =============================================================
-  # Stage 5: ReviewGround Self-Verification (Dogfooding)
+  # Stage 5: ReviewGround Post-CI Verification Summary
   # =============================================================
-  reviewground-self-verify:
-    name: 🛡️ 5. ReviewGround Self-Verification
+  reviewground-summary:
+    name: 🚦 5. Post-CI Verification Summary
     needs: [gitleaks, security-audit, build, test]
     if: always() && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
@@ -127,12 +171,9 @@ jobs:
       contents: read
       pull-requests: write
       actions: read
-      checks: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v7
@@ -143,23 +184,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run ReviewGround Action
+      - name: Run ReviewGround Summary
         uses: ./
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          mode: all
-          enable-pr-description-update: 'true'
-          enable-check-run: 'true'
+          mode: summary
           gitleaks-result: ${{ needs.gitleaks.result }}
           audit-result: ${{ needs.security-audit.result }}
           build-result: ${{ needs.build.result }}
           test-result: ${{ needs.test.result }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
-          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
