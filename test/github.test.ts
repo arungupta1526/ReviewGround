@@ -236,6 +236,50 @@ describe('Sticky vs Commit-by-Commit PR Comment Modes', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('updates existing sticky comment marking CI as in-progress for new commit and collapsing previous results', async () => {
+    const { postOrUpdatePrComment } = await import('../src/github/comments.js');
+    const originalFetch = globalThis.fetch;
+    let patchedBody = '';
+
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (init?.method === 'PATCH') {
+        const bodyObj = JSON.parse(init.body as string);
+        patchedBody = bodyObj.body;
+        return new Response(JSON.stringify({ id: 888 }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify([
+          {
+            id: 888,
+            body: `## AI Review\n\n---\n\n### 🚦 CI Pipeline Results & Verification\n\n| Stage | Status |\n|---|---|\n| Build | Passed |\n\n<!-- reviewground-comment -->`,
+          },
+        ]),
+        { status: 200 }
+      );
+    };
+
+    try {
+      await postOrUpdatePrComment(
+        '## Fresh Review for New Commit',
+        'mock-token',
+        'owner/repo',
+        '12',
+        '<!-- reviewground-comment -->',
+        true,
+        { commitSha: 'abcdef123456789' }
+      );
+
+      assert.ok(patchedBody.includes('## Fresh Review for New Commit'));
+      assert.ok(patchedBody.includes('Commit `abcdef1` pushed — CI verification pipeline is in progress...'));
+      assert.ok(patchedBody.includes('<details>'));
+      assert.ok(patchedBody.includes('📜 Previous CI Verification Results'));
+      assert.ok(patchedBody.includes('| Build | Passed |'));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 

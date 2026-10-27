@@ -59,6 +59,25 @@ function resolvePrNumber(): string {
   return '';
 }
 
+function resolveCommitSha(): string {
+  const inputSha = getOptionalInput('commit-sha', ['COMMIT_SHA']);
+  if (inputSha) return inputSha;
+
+  // Inspect GitHub event payload for the actual PR head commit
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (eventPath && fs.existsSync(eventPath)) {
+    try {
+      const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+      const headSha = eventData.pull_request?.head?.sha;
+      if (headSha) return String(headSha);
+    } catch {
+      // Ignore JSON parse error
+    }
+  }
+
+  return process.env.GITHUB_SHA || '';
+}
+
 async function run(): Promise<void> {
   try {
     const token = getOptionalInput('github-token', ['GITHUB_TOKEN', 'GH_TOKEN']);
@@ -188,10 +207,12 @@ async function run(): Promise<void> {
       return;
     }
 
+    const commitSha = resolveCommitSha();
     const baseConfig = {
       githubToken: token,
       repo,
       prNumber,
+      commitSha: commitSha || undefined,
       commentTag: getOptionalInput('comment-tag', ['REVIEWGROUND_COMMENT_TAG', 'COMMENT_TAG']) || undefined,
       stickyComment: getBooleanInput('sticky-comment', ['REVIEWGROUND_STICKY_COMMENT', 'STICKY_COMMENT'], true),
       runId: getOptionalInput('run-id', ['GITHUB_RUN_ID', 'RUN_ID']) || undefined,

@@ -138,6 +138,10 @@ inputs:
     description: 'GitHub Actions workflow run ID for duration calculation (defaults to GITHUB_RUN_ID)'
     required: false
 
+  commit-sha:
+    description: 'Commit SHA associated with review and CI verification status (defaults to github.sha)'
+    required: false
+
   extra-stages:
     description: 'JSON array of extra CI stages to include in summary table (e.g. [{"name":"Deploy","result":"success"}])'
     required: false

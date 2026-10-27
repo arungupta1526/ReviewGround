@@ -278,6 +278,11 @@ export async function postInlineSuggestions(
   }
 }
 
+export interface PostCommentOptions {
+  commitSha?: string;
+  runId?: string;
+}
+
 /**
  * Creates or updates the PR comment.
  * If sticky is true (default), updates the existing comment in-place.
@@ -289,7 +294,8 @@ export async function postOrUpdatePrComment(
   repo?: string,
   prNumber?: string,
   commentTag = DEFAULT_COMMENT_TAG,
-  sticky = true
+  sticky = true,
+  options?: PostCommentOptions
 ): Promise<void> {
   if (!token || !prNumber || !repo) {
     console.log('ℹ️  Skipping PR comment: GITHUB_TOKEN, PR_NUMBER, or REPO_FULL_NAME not provided.');
@@ -331,7 +337,21 @@ export async function postOrUpdatePrComment(
           const ciPart = existing.body.slice(ciIndex);
           const tagIndex = ciPart.indexOf(commentTag);
           const preservedCi = tagIndex !== -1 ? ciPart.slice(0, tagIndex).trimEnd() : ciPart.trimEnd();
-          commentBody = `${markdown}\n\n---\n\n${preservedCi}\n\n${commentTag}`;
+
+          if (options?.commitSha) {
+            const shortSha = options.commitSha.slice(0, 7);
+            const prevBody = preservedCi.replace(CI_SECTION_HEADER, '').trim();
+            const cleanPrev = prevBody.includes('<details>')
+              ? prevBody
+              : prevBody
+                ? `\n\n<details>\n<summary>📜 Previous CI Verification Results</summary>\n\n${prevBody}\n\n</details>`
+                : '';
+
+            const inProgressCi = `${CI_SECTION_HEADER}\n\n> ⏳ **Commit \`${shortSha}\` pushed — CI verification pipeline is in progress...**\n> *Verification results will update automatically once CI jobs complete.*${cleanPrev}`;
+            commentBody = `${markdown}\n\n---\n\n${inProgressCi}\n\n${commentTag}`;
+          } else {
+            commentBody = `${markdown}\n\n---\n\n${preservedCi}\n\n${commentTag}`;
+          }
         }
 
         const updateRes = await fetch(

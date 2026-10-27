@@ -32,6 +32,7 @@ export interface SummaryConfig {
   repo?: string;
   prNumber?: string;
   runId?: string;
+  commitSha?: string;
   gitleaksResult?: string;
   auditResult?: string;
   buildResult?: string;
@@ -92,7 +93,8 @@ export function buildCiSummaryMarkdown(
   durations: StageDurations,
   runId?: string,
   repo?: string,
-  extraStagesJson?: string
+  extraStagesJson?: string,
+  commitSha?: string
 ): string {
   const gBadge = getStatusBadge(gitleaks);
   const aBadge = getStatusBadge(audit);
@@ -155,9 +157,14 @@ export function buildCiSummaryMarkdown(
     }
   }
 
+  const shortSha = commitSha ? commitSha.slice(0, 7) : '';
+  const metaHeader = shortSha
+    ? `> 📌 **Commit:** \`${shortSha}\`${runUrl ? ` · **Run:** [Run &#35;${runId}](${runUrl})` : ''}\n\n`
+    : '';
+
   return `${CI_SECTION_HEADER}
 
-| Pipeline Stage | Status | Duration | Verification Summary |
+${metaHeader}| Pipeline Stage | Status | Duration | Verification Summary |
 |---|:---:|:---:|---|
 | 🐍 **1. Gitleaks Secret Scan** | ${gBadge.icon} ${gBadge.text} | ${gDur} | Secret, token & credential leak detection |
 | 🐍 **2. Dependency Audit** | ${aBadge.icon} ${aBadge.text} | ${aDur} | Security vulnerability & zero-CVE audit |
@@ -171,7 +178,8 @@ export function buildDynamicCiSummaryMarkdown(
   jobs: DiscoveredCiJob[],
   runId?: string,
   repo?: string,
-  extraStagesJson?: string
+  extraStagesJson?: string,
+  commitSha?: string
 ): string {
   const runUrl = runId && repo ? `https://github.com/${repo}/actions/runs/${runId}` : '';
   const runLinkText = runUrl ? `([View GitHub Actions Run](${runUrl}))` : '';
@@ -227,9 +235,14 @@ export function buildDynamicCiSummaryMarkdown(
     verdict = `⚠️ **CI finished with mixed status.** ${runLinkText}`;
   }
 
+  const shortSha = commitSha ? commitSha.slice(0, 7) : '';
+  const metaHeader = shortSha
+    ? `> 📌 **Commit:** \`${shortSha}\`${runUrl ? ` · **Run:** [Run &#35;${runId}](${runUrl})` : ''}\n\n`
+    : '';
+
   return `${CI_SECTION_HEADER}
 
-| Pipeline Stage / Job | Status | Duration | Verification Logs |
+${metaHeader}| Pipeline Stage / Job | Status | Duration | Verification Logs |
 |---|:---:|:---:|---|${rows}
 
 ${verdict}`;
@@ -240,6 +253,7 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
   const repo = (config.repo || process.env.REPO_FULL_NAME || process.env.GITHUB_REPOSITORY || '').trim();
   const prNumber = (config.prNumber || process.env.PR_NUMBER || '').trim();
   const runId = (config.runId || process.env.RUN_ID || process.env.GITHUB_RUN_ID || '').trim();
+  const commitSha = (config.commitSha || process.env.COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
   const commentTag = config.commentTag || DEFAULT_COMMENT_TAG;
 
   const gitleaksRaw = (config.gitleaksResult || process.env.GITLEAKS_RESULT || '').trim();
@@ -299,7 +313,8 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
       durations,
       runId,
       repo,
-      extraStagesRaw || undefined
+      extraStagesRaw || undefined,
+      commitSha || undefined
     );
   } else if (discoveredJobs.length > 0) {
     console.log(`📊 [ReviewGround] Generating Post-CI Summary dynamically for ${discoveredJobs.length} workflow job(s)...`);
@@ -307,14 +322,16 @@ export async function runSummary(config: SummaryConfig = {}): Promise<string> {
       discoveredJobs,
       runId,
       repo,
-      extraStagesRaw || undefined
+      extraStagesRaw || undefined,
+      commitSha || undefined
     );
   } else {
     summaryMarkdown = buildDynamicCiSummaryMarkdown(
       [],
       runId,
       repo,
-      extraStagesRaw || undefined
+      extraStagesRaw || undefined,
+      commitSha || undefined
     );
   }
 

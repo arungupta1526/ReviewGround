@@ -73,6 +73,7 @@ export interface ReviewerConfig {
   repo?: string;
   prNumber?: string;
   runId?: string;
+  commitSha?: string;
   baseBranch?: string;
   provider?: string;
   model?: string;
@@ -397,7 +398,7 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
         diffLength: truncatedDiff.length,
         responseLength: response.text.length,
         latencyMs: response.latencyMs,
-        commitSha: process.env.GITHUB_SHA,
+        commitSha: config.commitSha || process.env.COMMIT_SHA || process.env.GITHUB_SHA,
         runId: config.runId || process.env.GITHUB_RUN_ID,
         repo: config.repo || process.env.GITHUB_REPOSITORY,
         previousHistory,
@@ -440,7 +441,18 @@ ${cleanReviewText}${preMergeChecksBox}${testCoverageSection}${agentPromptBox}${r
   }
 
   // Post / Update Sticky PR Comment & Suggestions
-  await postOrUpdatePrComment(markdownOutput, token, repo, prNumber, commentTag, config.stickyComment !== false);
+  await postOrUpdatePrComment(
+    markdownOutput,
+    token,
+    repo,
+    prNumber,
+    commentTag,
+    config.stickyComment !== false,
+    {
+      commitSha: config.commitSha || process.env.COMMIT_SHA || process.env.GITHUB_SHA,
+      runId: config.runId || process.env.GITHUB_RUN_ID,
+    }
+  );
 
   if (config.enablePruneInlineSuggestions && token && repo && prNumber) {
     await prunePreviousInlineComments(repo, token, prNumber);

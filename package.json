@@ -42,10 +42,10 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "undici": "^6.28.2",
+    "undici": "^6.29.1",
     "@fastify/busboy": "^3.2.3"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.22.1"
   }
 }
