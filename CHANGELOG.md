@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.1](https://github.com/arungupta1526/ReviewGround/compare/v1.6.0...v1.6.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **reviewer:** auto-heal repeated mermaid sequence arrows, flowchart bleed, and syntax errors ([d214e59](https://github.com/arungupta1526/ReviewGround/commit/d214e5939c15c94c7e14f7e19126ecd791ac56da))
+* **reviewer:** auto-heal repeated mermaid sequence arrows, flowchart bleed, and syntax errors ([9d97f6b](https://github.com/arungupta1526/ReviewGround/commit/9d97f6b8c3165f3a1021cce64a2dfc908695a73c))
+
 ## [1.6.0](https://github.com/arungupta1526/ReviewGround/compare/v1.5.0...v1.6.0) (2026-10-27)
 
 
