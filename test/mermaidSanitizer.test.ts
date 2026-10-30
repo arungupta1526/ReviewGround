@@ -46,6 +46,9 @@ describe('Mermaid Diagram Sanitizer & Glitch Auto-Healer', () => {
       'A-- >>B: spaced dotted',
       'C- >>D: spaced solid',
       'E-> >F: spaced head',
+      'G-- >H: spaced dotted open',
+      'I- >J: spaced solid open',
+      'K- - >>L: spaced hyphen',
     ].join('\n');
 
     const result = sanitizeSequenceDiagram(input);
@@ -55,6 +58,119 @@ describe('Mermaid Diagram Sanitizer & Glitch Auto-Healer', () => {
         'A-->>B: spaced dotted',
         'C->>D: spaced solid',
         'E->>F: spaced head',
+        'G-->H: spaced dotted open',
+        'I->J: spaced solid open',
+        'K-->>L: spaced hyphen',
+      ].join('\n')
+    );
+  });
+
+  it('heals repeated arrows and arrowheads (->->, -->-->, ->>>, -->>>) matching PR #129 regression', () => {
+    const pr129Snippet = `sequenceDiagram
+    autonumber
+    actor Dev as Developer
+    participant GH as GitHub Actions
+    participant Scan as Trivy Security Scan
+    participant Reg as Docker Hub / GHCR
+    participant AWS as AWS Lightsail
+
+    Dev->->GH: Push Code / Workflow Dispatch
+    GH->->GH: Run docker-backend & docker-frontend in parallel
+    GH->->Scan: Build local image & run Trivy vulnerability check
+    Scan-->>GH: Vulnerability check passed (exit-code 0)
+    GH->->Reg: Push multi-arch images (backend-latest & frontend-latest)
+    Reg-->>GH: Push complete
+    GH-)AWS: Trigger deploy-lightsail immediately (backend only)
+    AWS-->>AWS: Pull container & verify health check (/api/health)`;
+
+    const sanitized = sanitizeSequenceDiagram(pr129Snippet);
+    assert.ok(!sanitized.includes('->->'));
+    assert.ok(sanitized.includes('Dev->>GH: Push Code / Workflow Dispatch'));
+    assert.ok(sanitized.includes('GH->>GH: Run docker-backend & docker-frontend in parallel'));
+    assert.ok(sanitized.includes('GH->>Scan: Build local image & run Trivy vulnerability check'));
+    assert.ok(sanitized.includes('GH->>Reg: Push multi-arch images (backend-latest & frontend-latest)'));
+    assert.ok(sanitized.includes('GH-)AWS: Trigger deploy-lightsail immediately (backend only)'));
+
+    // Also test -->--> and excessive arrowheads
+    const multiple = [
+      'A-->-->B: return stream',
+      'C->>>D: multi tip',
+      'E-->>>F: multi dotted tip',
+    ].join('\n');
+    assert.strictEqual(
+      sanitizeSequenceDiagram(multiple),
+      [
+        'A-->>B: return stream',
+        'C->>D: multi tip',
+        'E-->>F: multi dotted tip',
+      ].join('\n')
+    );
+  });
+
+  it('heals flowchart arrow syntax and excessive hyphens in sequence diagrams', () => {
+    const input = [
+      'A-.->>B: flowchart dotted arrow',
+      'B-.->C: flowchart dotted line',
+      'C==>D: flowchart thick arrow',
+      'D==>>E: flowchart thick double arrow',
+      'E--->>F: triple hyphen arrow',
+      'F---->G: quad hyphen line',
+      'H<->I: bidirectional arrow',
+      'J<-->>K: bidirectional dotted',
+    ].join('\n');
+
+    const result = sanitizeSequenceDiagram(input);
+    assert.strictEqual(
+      result,
+      [
+        'A-->>B: flowchart dotted arrow',
+        'B-->C: flowchart dotted line',
+        'C->>D: flowchart thick arrow',
+        'D->>E: flowchart thick double arrow',
+        'E-->>F: triple hyphen arrow',
+        'F-->G: quad hyphen line',
+        'H->>I: bidirectional arrow',
+        'J-->>K: bidirectional dotted',
+      ].join('\n')
+    );
+  });
+
+  it('sanitizes semicolons inside message labels and strips trailing semicolons', () => {
+    const input = [
+      'autonumber;',
+      'participant User;',
+      'User->>API: Query status; if 200; return data;',
+      'API-->>User: 200 OK; payload received;',
+    ].join('\n');
+
+    const result = sanitizeSequenceDiagram(input);
+    assert.strictEqual(
+      result,
+      [
+        'autonumber',
+        'participant User',
+        'User->>API: Query status, if 200, return data',
+        'API-->>User: 200 OK, payload received',
+      ].join('\n')
+    );
+  });
+
+  it('protects reserved keywords used as standalone participant IDs', () => {
+    const input = [
+      'participant Loop',
+      'actor End',
+      'participant Note',
+      'participant Valid as "Custom Label"',
+    ].join('\n');
+
+    const result = sanitizeSequenceDiagram(input);
+    assert.strictEqual(
+      result,
+      [
+        'participant Loop_Service as Loop',
+        'actor End_Service as End',
+        'participant Note_Service as Note',
+        'participant Valid as "Custom Label"',
       ].join('\n')
     );
   });

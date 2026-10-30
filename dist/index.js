@@ -21018,7 +21018,7 @@ ${generatedMarkdown}
 var fs4 = __toESM(require("fs"));
 var ANTI_NITPICK_RULE = "\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.";
 var SEVERITY_BADGES_INSTRUCTION = "\nSEVERITY RATING FORMAT: Prefix each finding with one of these standardized severity badges:\n- \u{1F6A8} **[BLOCKER]**: High/critical security vulnerabilities, data loss, crashes, or severe regressions.\n- \u26A0\uFE0F **[WARNING]**: Performance bottlenecks, resource leaks, edge-case bugs, or unhandled errors.\n- \u{1F4A1} **[SUGGESTION]**: Architectural enhancements or missing test coverage stubs (comprehensive mode only).\nDo NOT report low-value style opinions or manufacture non-existent issues.";
-var SEQUENCE_DIAGRAM_INSTRUCTION = "\nARCHITECTURE & WORKFLOW VISUALIZATION: If the pull request modifies or introduces multi-component interactions (e.g., client -> API -> database, or webhook -> verification -> state updates), provide a concise Mermaid sequence diagram (```mermaid sequenceDiagram ... ```) illustrating the end-to-end data flow. Use ONLY valid standard Mermaid arrows: `->>` for requests/calls, `-->>` for responses/returns, and `-)` for async messages. NEVER embed words or extra characters inside arrows (e.g., do NOT write `--word->>`).";
+var SEQUENCE_DIAGRAM_INSTRUCTION = '\nARCHITECTURE & WORKFLOW VISUALIZATION: If the pull request modifies or introduces multi-component interactions (e.g., client -> API -> database, or webhook -> verification -> state updates), provide a concise Mermaid sequence diagram (```mermaid sequenceDiagram ... ```) illustrating the end-to-end data flow. Use ONLY valid standard Mermaid sequence arrows: `->>` for requests/calls, `-->>` for responses/returns, and `-)` for async messages. NEVER embed words or extra characters inside arrows (e.g., do NOT write `--word->>`). NEVER repeat arrowheads (e.g., do NOT write `->->` or `-->-->`). NEVER use flowchart link syntax (e.g., do NOT write `-.->` or `==>`). NEVER use semicolons (`;`) inside message text or at ends of lines. Always map participant labels using `participant ID as "Display Name"` and avoid reserved keywords (`End`, `Loop`, `Note`) as raw participant IDs.';
 var REVIEW_FOCUS_MAP = {
   critical: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n\nFocus ONLY on critical and security issues. Do NOT comment on style, naming, or minor improvements." + ANTI_NITPICK_RULE,
   standard: "1. Critical bugs, edge-case regressions, unhandled exceptions, and memory/resource leaks.\n2. Security risks (OWASP Top 10, secret leaks, SSRF, injection, XSS, insecure deserialization).\n3. Performance bottlenecks (unbounded loops, N+1 queries, unindexed searches, missing cleanup).\n4. Direct, actionable code fixes with concise diff blocks." + ANTI_NITPICK_RULE,
@@ -21740,18 +21740,50 @@ function sanitizeSequenceDiagram(text) {
   const sanitizedLines = [];
   for (let i = 0; i < lines.length; i++) {
     let cleaned = lines[i];
+    cleaned = cleaned.replace(/;\s*$/, "");
+    cleaned = cleaned.replace(
+      /^(\s*(?:participant|actor)\s+)(loop|alt|opt|par|critical|break|rect|end|note)(\s*)$/i,
+      "$1$2_Service as $2$3"
+    );
+    cleaned = cleaned.replace(/-->\s*-->+/g, "-->>");
+    cleaned = cleaned.replace(/(?<!-)->\s*->+/g, "->>");
+    cleaned = cleaned.replace(/-->>{2,}/g, "-->>");
+    cleaned = cleaned.replace(/(?<!-)->>{2,}/g, "->>");
+    cleaned = cleaned.replace(/-\.-*>>/g, "-->>");
+    cleaned = cleaned.replace(/-\.-*>/g, "-->");
+    cleaned = cleaned.replace(/={2,}>>/g, "->>");
+    cleaned = cleaned.replace(/={2,}>/g, "->>");
+    cleaned = cleaned.replace(/<-->>/g, "-->>");
+    cleaned = cleaned.replace(/<-+>/g, "->>");
+    cleaned = cleaned.replace(/-{3,}(>>|x|\))/g, "--$1");
+    cleaned = cleaned.replace(/-{3,}>/g, "-->");
+    cleaned = cleaned.replace(/-{3,}/g, "-->");
     cleaned = cleaned.replace(/--[a-zA-Z0-9_]+->>/g, "-->>");
     cleaned = cleaned.replace(/(?<!-)-[a-zA-Z0-9_]+->>/g, "->>");
     cleaned = cleaned.replace(/--[a-zA-Z0-9_]+-->/g, "-->");
+    cleaned = cleaned.replace(/--[a-zA-Z0-9_]+->(?!>)/g, "-->");
     cleaned = cleaned.replace(/(?<!-)-[a-zA-Z0-9_]+-->/g, "-->");
+    cleaned = cleaned.replace(/(?<!-)-[a-zA-Z0-9_]+->(?!>)/g, "->");
+    cleaned = cleaned.replace(/(?<!-)-[a-zA-Z0-9_]+-\)/g, "-)");
+    cleaned = cleaned.replace(/--[a-zA-Z0-9_]+-\)/g, "--))");
+    cleaned = cleaned.replace(/-\s+-/g, "--");
     cleaned = cleaned.replace(/--\s+>>/g, "-->>");
     cleaned = cleaned.replace(/(?<!-)-\s+>>/g, "->>");
     cleaned = cleaned.replace(/->\s+>/g, "->>");
+    cleaned = cleaned.replace(/--\s+>/g, "-->");
+    cleaned = cleaned.replace(/(?<!-)-\s+>/g, "->");
+    const arrowMessageMatch = cleaned.match(/^(\s*[^:]*(?:->>|-->>|->|-->|-x|--x|-\)|--\))\s*[^:]*:\s*)(.*)$/);
+    if (arrowMessageMatch) {
+      const prefix = arrowMessageMatch[1];
+      const message = arrowMessageMatch[2];
+      const safeMessage = message.replace(/;/g, ",");
+      cleaned = prefix + safeMessage;
+    }
     sanitizedLines.push(cleaned);
   }
   while (sanitizedLines.length > 0) {
     const last = sanitizedLines[sanitizedLines.length - 1].trim();
-    if (last === "" || /(?:->>|-->>|->|-->|-\))\s*$/.test(last) || /[-=]>$/.test(last)) {
+    if (last === "" || /(?:->>|-->>|->|-->|-x|--x|-\)|--\))\s*$/.test(last) || /[-=]>$/.test(last)) {
       sanitizedLines.pop();
     } else {
       break;
@@ -21768,7 +21800,7 @@ function healUnclosedMermaid(markdown) {
     return markdown;
   }
   const diagramBody = unclosedMatch[1] || "";
-  const hasArrows = /->>|-->>|->|-->|-\)/.test(diagramBody);
+  const hasArrows = /(?:->>|-->>|->|-->|-x|--x|-\)|--\))/.test(diagramBody);
   if (!hasArrows) {
     const beforeDiagram = markdown.slice(0, unclosedMatch.index).trimEnd();
     const cleanedBefore = beforeDiagram.replace(
