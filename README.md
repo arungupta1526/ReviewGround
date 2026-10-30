@@ -212,7 +212,7 @@ ReviewGround is designed with **zero-boilerplate ergonomics**. Over 80% of intel
 | **AI Coding Agent Prompts**  |              Built-in                  | Formats defensive `<details><summary>🤖 Prompt for AI Coding Agents</summary>` blocks   |
 | **Review Effort Estimator**  |              Built-in                  | Automatically computes complexity tiers (1–5) and review duration estimate (`~15–20m`)|
 | **Pre-Merge Invariant Table** |              Built-in                  | Expandable status checklist for test coverage, secret sanitization & package grounding|
-| **Sequence Diagram Prompts** |              Built-in                  | Directs models to generate Mermaid sequence diagrams for multi-tier architecture flows|
+| **Sequence Diagram Prompts & Auto-Healer** | Built-in               | Directs models to generate Mermaid sequence diagrams with automated syntax healing & sanitization for GitHub rich display rendering|
 
 ### B. Opt-In Enterprise Power Flags (Disabled by Default — Add When Needed)
 
