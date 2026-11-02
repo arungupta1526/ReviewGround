@@ -42,4 +42,14 @@ describe('Review Prompt Builder & Guidelines Ingestion', () => {
     assert.ok(prompt.includes('Existing Project Structure'));
     assert.ok(prompt.includes('src/utils/'));
   });
+
+  it('injects sequence diagram instruction with autonumber directive', () => {
+    const prompt = buildReviewPrompt({
+      reviewLevel: 'standard',
+      truncatedDiff: '+const a = 1;',
+    });
+
+    assert.ok(prompt.includes('ARCHITECTURE & WORKFLOW VISUALIZATION'));
+    assert.ok(prompt.includes('autonumber'));
+  });
 });
