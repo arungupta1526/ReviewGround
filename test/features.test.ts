@@ -25,6 +25,13 @@ describe('Smart Diff Prioritizer (Feature 5)', () => {
     assert.ok(result.packedDiff.length > 0);
   });
 
+  it('uses default 400,000 characters (100k tokens) budget when omitted', () => {
+    const diff = makeDiffBlock('src/large.ts', 'export function processData() {}', 150000);
+    const result = packPrioritizedDiff(diff);
+    assert.strictEqual(result.skippedFiles.length, 0);
+    assert.strictEqual(result.packedDiff.length, diff.length);
+  });
+
   it('scores auth files as P0 (highest priority)', () => {
     const diff =
       makeDiffBlock('src/auth/login.ts', 'auth code', 2000) +

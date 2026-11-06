@@ -103,9 +103,9 @@ export interface SmartDiffResult {
  * P0 files are always included. P1 files fill remaining budget. P2 files are skipped first.
  *
  * @param rawDiff - Full raw git diff string
- * @param maxChars - Token budget in characters (default 28000 ≈ ~7000 tokens)
+ * @param maxChars - Token budget in characters (default 400000 ≈ ~100,000 tokens)
  */
-export function packPrioritizedDiff(rawDiff: string, maxChars = 28000): SmartDiffResult {
+export function packPrioritizedDiff(rawDiff: string, maxChars = 400000): SmartDiffResult {
   const totalInputChars = rawDiff.length;
 
   if (totalInputChars <= maxChars) {

@@ -206,6 +206,8 @@ ReviewGround is designed with **zero-boilerplate ergonomics**. Over 80% of intel
 | **Token & Cost Footer**      |      `enable-cost-footer: 'true'`      | Shows single-run tokens, USD cost, latency, and cumulative PR spend               |
 | **Deterministic Sampling**   |          `temperature: '0.2'`          | Low variance, highly deterministic code reviews                                   |
 | **Output Token Limit**       |          `max-tokens: '8192'`          | Generous response bounds preventing truncation during thinking/diagram generation |
+| **Input Diff Token Budget**  |     `max-diff-tokens: '100000'`        | Token budget for diff analysis before prioritization / truncation (100k tokens ≈ 400k chars) |
+| **Input Diff Character Budget** |   `max-diff-chars: '400000'`         | Raw character ceiling for diff analysis (overrides max-diff-tokens if explicitly set) |
 | **Base Comparison Branch**   |         `base-branch: 'main'`          | Automatically calculates diff against base `main` branch                          |
 | **Review Language**          |        `review-language: 'en'`         | English language review output by default                                         |
 | **Actionable Findings Banner**|              Built-in                  | Top-level summary badge highlighting Blockers, Warnings, and Committable Suggestions|
@@ -920,6 +922,8 @@ Every setting can be passed either as an Action Input (`with:`) or as an Environ
 | **Base Branch**              | `base-branch`                     | `REVIEWGROUND_BASE_BRANCH`, `BASE_BRANCH`                            |                                                  `main`                                                  |
 | **LLM Temperature**          | `temperature`                     | `REVIEWGROUND_TEMPERATURE`, `LLM_TEMPERATURE`                        |                                                  `0.2`                                                   |
 | **Max Tokens**               | `max-tokens`                      | `REVIEWGROUND_MAX_TOKENS`, `LLM_MAX_TOKENS`                          |                                                  `8192`                                                  |
+| **Max Diff Tokens**          | `max-diff-tokens`                 | `REVIEWGROUND_MAX_DIFF_TOKENS`, `DIFF_MAX_TOKENS`                    |                                                 `100000` (100k tokens ≈ 400k chars)                      |
+| **Max Diff Chars**           | `max-diff-chars`                  | `REVIEWGROUND_MAX_DIFF_CHARS`, `DIFF_MAX_CHARS`                      |                                                 `400000` (overrides max-diff-tokens)                     |
 | **Review Level**             | `review-level`                    | `REVIEWGROUND_REVIEW_LEVEL`, `REVIEW_LEVEL`                          |                         `standard` (`critical` \| `standard` \| `comprehensive`)                         |
 | **Ignore Patterns**          | `ignore-patterns`                 | `REVIEWGROUND_IGNORE_PATTERNS`, `IGNORE_PATTERNS`                    |                            — (comma-separated globs e.g. `dist/**,*.min.js`)                             |
 | **Review Language**          | `review-language`                 | `REVIEWGROUND_REVIEW_LANGUAGE`, `REVIEW_LANGUAGE`                    |                              `en` (e.g. `ja`, `es`, `de`, `zh`, `pt`, `fr`)                              |

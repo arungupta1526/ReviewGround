@@ -95,6 +95,15 @@ inputs:
     required: false
     default: '8192'
 
+  max-diff-tokens:
+    description: 'Maximum token budget for PR diff analysis before prioritization / truncation (default: 100000 = ~400k chars)'
+    required: false
+    default: '100000'
+
+  max-diff-chars:
+    description: 'Maximum character budget for PR diff analysis before prioritization / truncation (overrides max-diff-tokens). Default: 400000'
+    required: false
+
   review-level:
     description: 'Review depth: "critical" (bugs & security only), "standard" (default — bugs, security, performance), "comprehensive" (all including style & docs)'
     required: false

@@ -21,6 +21,8 @@ export interface PrDescribeConfig {
   fallbackModels?: string[];
   temperature?: number;
   maxTokens?: number;
+  maxDiffTokens?: number;
+  maxDiffChars?: number;
   geminiApiKey?: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
@@ -36,7 +38,7 @@ export interface PrDescribeConfig {
  * Builds the prompt instructed to output an executive summary, key changes,
  * a walkthrough table (| File | Summary |), a testing checklist, and risk assessment.
  */
-export function buildDescribePrompt(diff: string): string {
+export function buildDescribePrompt(diff: string, maxDiffChars = 400000): string {
   return `You are a Principal Software Engineer creating a comprehensive Pull Request Description.
 
 Analyze the following Git diff and generate a clean, professional Pull Request Description.
@@ -66,7 +68,7 @@ A concise 2-3 sentence overview explaining what problem this PR solves and what 
 
 Git Diff:
 \`\`\`diff
-${diff.slice(0, 28000)}
+${diff.slice(0, maxDiffChars)}
 \`\`\`
 `;
 }
@@ -208,7 +210,8 @@ export async function runPrDescribe(config: PrDescribeConfig): Promise<string | 
     return null;
   }
 
-  const prompt = buildDescribePrompt(diff);
+  const maxDiffBudget = config.maxDiffChars ?? (config.maxDiffTokens ? config.maxDiffTokens * 4 : 400000);
+  const prompt = buildDescribePrompt(diff, maxDiffBudget);
   const options: ReviewOptions = {
     model: config.model,
     fallbackModels: config.fallbackModels,
