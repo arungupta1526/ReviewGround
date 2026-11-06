@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0](https://github.com/arungupta1526/ReviewGround/compare/v1.6.1...v1.7.0) (2026-11-06)
+
+
+### Features
+
+* **prompt:** instruct LLM to include autonumber in sequence diagrams ([ae0ec80](https://github.com/arungupta1526/ReviewGround/commit/ae0ec80a007c35e54c1b649e02fc58437970fc4f))
+* **prompt:** instruct LLM to include autonumber in sequence diagrams ([47ca19a](https://github.com/arungupta1526/ReviewGround/commit/47ca19af2f038105e3c23dc9a6dcf2e63e6f638a))
+* **reviewer:** make PR diff budget configurable with 100k tokens default and add anti-bikeshedding rule ([69f7ec4](https://github.com/arungupta1526/ReviewGround/commit/69f7ec4448426bb64b4805ffe7a20d82011ed779))
+* **reviewer:** make PR diff budget configurable with 100k tokens default and add anti-bikeshedding rule ([ae7059e](https://github.com/arungupta1526/ReviewGround/commit/ae7059e49ccaafdb168305e26c7dd3bf08bfdc58))
+
+
+### Bug Fixes
+
+* **reviewer:** streamline large-diff conditional branching and eliminate dead else branch ([1a2f951](https://github.com/arungupta1526/ReviewGround/commit/1a2f951c118168762048156a609ae2ecc9acd945))
+
 ## [1.6.1](https://github.com/arungupta1526/ReviewGround/compare/v1.6.0...v1.6.1) (2026-10-30)
 
 
