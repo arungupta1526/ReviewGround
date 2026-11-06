@@ -42397,19 +42397,21 @@ ${registryResult.notes.map((n) => `- ${n}`).join("\n")}
   const maxDiffBudget = config2.maxDiffChars ?? (config2.maxDiffTokens ? config2.maxDiffTokens * 4 : 4e5);
   let truncatedDiff;
   let skippedFiles = [];
-  if (config2.enableSmartDiffPriority !== false && diff.length > maxDiffBudget) {
-    const priorityResult = packPrioritizedDiff(diff, maxDiffBudget);
-    truncatedDiff = priorityResult.packedDiff;
-    skippedFiles = priorityResult.skippedFiles;
-    console.log(priorityResult.priorityLog);
-    if (priorityResult.skippedFiles.length > 0) {
-      console.log(`\u{1F5C2}\uFE0F Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(", ")}${priorityResult.skippedFiles.length > 10 ? "..." : ""}`);
-    }
-  } else {
-    truncatedDiff = truncateDiffClean(diff, maxDiffBudget);
-    if (diff.length > maxDiffBudget) {
+  if (diff.length > maxDiffBudget) {
+    if (config2.enableSmartDiffPriority !== false) {
+      const priorityResult = packPrioritizedDiff(diff, maxDiffBudget);
+      truncatedDiff = priorityResult.packedDiff;
+      skippedFiles = priorityResult.skippedFiles;
+      console.log(priorityResult.priorityLog);
+      if (priorityResult.skippedFiles.length > 0) {
+        console.log(`\u{1F5C2}\uFE0F Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(", ")}${priorityResult.skippedFiles.length > 10 ? "..." : ""}`);
+      }
+    } else {
+      truncatedDiff = truncateDiffClean(diff, maxDiffBudget);
       console.log(`\u26A0\uFE0F Large diff detected (${diff.length} chars) \u2014 truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
     }
+  } else {
+    truncatedDiff = diff;
   }
   console.log(`\u{1F916} Analyzing code diff (${truncatedDiff.length} characters)...`);
   const repoContext = buildRepoContext(diff);

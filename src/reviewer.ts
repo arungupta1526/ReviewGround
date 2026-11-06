@@ -267,19 +267,21 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
   const maxDiffBudget = config.maxDiffChars ?? (config.maxDiffTokens ? config.maxDiffTokens * 4 : 400000);
   let truncatedDiff: string;
   let skippedFiles: string[] = [];
-  if (config.enableSmartDiffPriority !== false && diff.length > maxDiffBudget) {
-    const priorityResult = packPrioritizedDiff(diff, maxDiffBudget);
-    truncatedDiff = priorityResult.packedDiff;
-    skippedFiles = priorityResult.skippedFiles;
-    console.log(priorityResult.priorityLog);
-    if (priorityResult.skippedFiles.length > 0) {
-      console.log(`🗂️ Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(', ')}${priorityResult.skippedFiles.length > 10 ? '...' : ''}`);
-    }
-  } else {
-    truncatedDiff = truncateDiffClean(diff, maxDiffBudget);
-    if (diff.length > maxDiffBudget) {
+  if (diff.length > maxDiffBudget) {
+    if (config.enableSmartDiffPriority !== false) {
+      const priorityResult = packPrioritizedDiff(diff, maxDiffBudget);
+      truncatedDiff = priorityResult.packedDiff;
+      skippedFiles = priorityResult.skippedFiles;
+      console.log(priorityResult.priorityLog);
+      if (priorityResult.skippedFiles.length > 0) {
+        console.log(`🗂️ Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(', ')}${priorityResult.skippedFiles.length > 10 ? '...' : ''}`);
+      }
+    } else {
+      truncatedDiff = truncateDiffClean(diff, maxDiffBudget);
       console.log(`⚠️ Large diff detected (${diff.length} chars) — truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
     }
+  } else {
+    truncatedDiff = diff;
   }
   console.log(`🤖 Analyzing code diff (${truncatedDiff.length} characters)...`);
 
