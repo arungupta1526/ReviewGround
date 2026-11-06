@@ -17,6 +17,7 @@ describe('Review Prompt Builder & Guidelines Ingestion', () => {
     });
 
     assert.ok(prompt.includes('STRICT ANTI-NITPICK FILTER'));
+    assert.ok(prompt.includes('NO STYLISTIC / IDIOMATIC CHURN'));
     assert.ok(prompt.includes('[BLOCKER]'));
     assert.ok(prompt.includes('[WARNING]'));
     assert.ok(prompt.includes('[SUGGESTION]'));

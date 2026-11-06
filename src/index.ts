@@ -142,6 +142,14 @@ async function run(): Promise<void> {
         commentTag: getOptionalInput('comment-tag', ['REVIEWGROUND_COMMENT_TAG', 'COMMENT_TAG']) || undefined,
         provider: getOptionalInput('provider', ['REVIEWGROUND_PROVIDER', 'PROVIDER', 'LLM_PROVIDER']) || undefined,
         model: getOptionalInput('model', ['REVIEWGROUND_MODEL', 'MODEL', 'LLM_MODEL']) || undefined,
+        maxDiffTokens: (() => {
+          const m = getOptionalInput('max-diff-tokens', ['REVIEWGROUND_MAX_DIFF_TOKENS', 'DIFF_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : 100000;
+        })(),
+        maxDiffChars: (() => {
+          const m = getOptionalInput('max-diff-chars', ['REVIEWGROUND_MAX_DIFF_CHARS', 'DIFF_MAX_CHARS']);
+          return m ? parseInt(m, 10) : undefined;
+        })(),
         geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
         openaiApiKey: getOptionalInput('openai-api-key', ['OPENAI_API_KEY', 'OPENAI_KEY']) || undefined,
         anthropicApiKey: getOptionalInput('anthropic-api-key', ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY']) || undefined,
@@ -181,6 +189,14 @@ async function run(): Promise<void> {
         })(),
         maxTokens: (() => {
           const m = getOptionalInput('max-tokens', ['REVIEWGROUND_MAX_TOKENS', 'LLM_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : undefined;
+        })(),
+        maxDiffTokens: (() => {
+          const m = getOptionalInput('max-diff-tokens', ['REVIEWGROUND_MAX_DIFF_TOKENS', 'DIFF_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : 100000;
+        })(),
+        maxDiffChars: (() => {
+          const m = getOptionalInput('max-diff-chars', ['REVIEWGROUND_MAX_DIFF_CHARS', 'DIFF_MAX_CHARS']);
           return m ? parseInt(m, 10) : undefined;
         })(),
         geminiApiKey: getOptionalInput('gemini-api-key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) || undefined,
@@ -231,6 +247,14 @@ async function run(): Promise<void> {
         })(),
         maxTokens: (() => {
           const m = getOptionalInput('max-tokens', ['REVIEWGROUND_MAX_TOKENS', 'LLM_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : undefined;
+        })(),
+        maxDiffTokens: (() => {
+          const m = getOptionalInput('max-diff-tokens', ['REVIEWGROUND_MAX_DIFF_TOKENS', 'DIFF_MAX_TOKENS']);
+          return m ? parseInt(m, 10) : 100000;
+        })(),
+        maxDiffChars: (() => {
+          const m = getOptionalInput('max-diff-chars', ['REVIEWGROUND_MAX_DIFF_CHARS', 'DIFF_MAX_CHARS']);
           return m ? parseInt(m, 10) : undefined;
         })(),
         reviewLevel: (getOptionalInput('review-level', ['REVIEWGROUND_REVIEW_LEVEL', 'REVIEW_LEVEL']) || 'standard') as 'critical' | 'standard' | 'comprehensive',

@@ -58,7 +58,7 @@ export {
  * Truncates a git diff at a clean hunk boundary (on a `diff --git` line)
  * to avoid sending malformed diffs to LLMs.
  */
-export function truncateDiffClean(diff: string, maxChars = 32000): string {
+export function truncateDiffClean(diff: string, maxChars = 400000): string {
   if (diff.length <= maxChars) return diff;
   const truncated = diff.slice(0, maxChars);
   const lastHunkBoundary = truncated.lastIndexOf('\ndiff --git');
@@ -80,6 +80,8 @@ export interface ReviewerConfig {
   fallbackModels?: string[];
   temperature?: number;
   maxTokens?: number;
+  maxDiffTokens?: number;
+  maxDiffChars?: number;
   reviewLevel?: 'critical' | 'standard' | 'comprehensive';
   reviewLanguage?: string;
   ignorePatterns?: string[];
@@ -261,11 +263,12 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
     }
   }
 
-  // Diff Prioritization & Truncation
+  // Diff Prioritization & Truncation (Default: 100k tokens ≈ 400k characters)
+  const maxDiffBudget = config.maxDiffChars ?? (config.maxDiffTokens ? config.maxDiffTokens * 4 : 400000);
   let truncatedDiff: string;
   let skippedFiles: string[] = [];
-  if (config.enableSmartDiffPriority !== false && diff.length > 28000) {
-    const priorityResult = packPrioritizedDiff(diff, 28000);
+  if (config.enableSmartDiffPriority !== false && diff.length > maxDiffBudget) {
+    const priorityResult = packPrioritizedDiff(diff, maxDiffBudget);
     truncatedDiff = priorityResult.packedDiff;
     skippedFiles = priorityResult.skippedFiles;
     console.log(priorityResult.priorityLog);
@@ -273,8 +276,8 @@ export async function runReview(config: ReviewerConfig = {}): Promise<ProviderRe
       console.log(`🗂️ Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(', ')}${priorityResult.skippedFiles.length > 10 ? '...' : ''}`);
     }
   } else {
-    truncatedDiff = truncateDiffClean(diff);
-    if (diff.length > 32000) {
+    truncatedDiff = truncateDiffClean(diff, maxDiffBudget);
+    if (diff.length > maxDiffBudget) {
       console.log(`⚠️ Large diff detected (${diff.length} chars) — truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
     }
   }

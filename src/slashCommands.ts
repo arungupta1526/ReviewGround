@@ -33,6 +33,8 @@ export interface SlashCommandConfig {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  maxDiffTokens?: number;
+  maxDiffChars?: number;
   geminiApiKey?: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
@@ -205,6 +207,7 @@ async function executeOnDemandReview(
   const focus = focusMap[reviewLevel] ?? focusMap.standard;
   const label = reviewLevel === 'full' ? '🔍 Full Comprehensive' : reviewLevel === 'security' ? '🔒 Security-Focused' : reviewLevel === 'performance' ? '⚡ Performance-Focused' : '📋 Standard';
 
+  const maxDiffBudget = config.maxDiffChars ?? (config.maxDiffTokens ? config.maxDiffTokens * 4 : 400000);
   const prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 This is an on-demand ${label} review triggered via \`/review ${reviewLevel}\` slash command.
 
@@ -215,7 +218,7 @@ If the code looks clean, respond with "✅ All changes look clean!" and a brief 
 
 Git Diff:
 \`\`\`diff
-${diff.slice(0, 28000)}
+${diff.slice(0, maxDiffBudget)}
 \`\`\``;
 
   const response = await providerManager.executeReview(prompt, options);

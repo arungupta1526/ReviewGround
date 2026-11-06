@@ -18,7 +18,8 @@ export interface PromptConfig {
 }
 
 const ANTI_NITPICK_RULE =
-  '\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.';
+  '\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.\n' +
+  'NO STYLISTIC / IDIOMATIC CHURN: Never suggest refactoring between valid, functionally equivalent syntax (e.g. switching between async/await vs Promise chaining, loops vs .map/.forEach, if/else vs ternary, arrow vs function declaration, type vs interface) unless you can prove a concrete bug, race condition, memory leak, or security vulnerability. If the existing code is working and idiomatic, DO NOT touch it.';
 
 const SEVERITY_BADGES_INSTRUCTION =
   '\nSEVERITY RATING FORMAT: Prefix each finding with one of these standardized severity badges:\n- 🚨 **[BLOCKER]**: High/critical security vulnerabilities, data loss, crashes, or severe regressions.\n- ⚠️ **[WARNING]**: Performance bottlenecks, resource leaks, edge-case bugs, or unhandled errors.\n- 💡 **[SUGGESTION]**: Architectural enhancements or missing test coverage stubs (comprehensive mode only).\nDo NOT report low-value style opinions or manufacture non-existent issues.';

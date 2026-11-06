@@ -20597,7 +20597,7 @@ function splitAndPrioritizeDiff(rawDiff) {
     return { filePath, tier, reason, hunkBlock: block, charCount: block.length };
   });
 }
-function packPrioritizedDiff(rawDiff, maxChars = 28e3) {
+function packPrioritizedDiff(rawDiff, maxChars = 4e5) {
   const totalInputChars = rawDiff.length;
   if (totalInputChars <= maxChars) {
     return {
@@ -20837,7 +20837,7 @@ ${stubs}
 // src/prDescriber.ts
 var fs3 = __toESM(require("fs"));
 var PR_DESCRIPTION_TAG = "<!-- reviewground-pr-description -->";
-function buildDescribePrompt(diff) {
+function buildDescribePrompt(diff, maxDiffChars = 4e5) {
   return `You are a Principal Software Engineer creating a comprehensive Pull Request Description.
 
 Analyze the following Git diff and generate a clean, professional Pull Request Description.
@@ -20867,7 +20867,7 @@ A concise 2-3 sentence overview explaining what problem this PR solves and what 
 
 Git Diff:
 \`\`\`diff
-${diff.slice(0, 28e3)}
+${diff.slice(0, maxDiffChars)}
 \`\`\`
 `;
 }
@@ -20985,7 +20985,8 @@ async function runPrDescribe(config2) {
     console.warn("\u26A0\uFE0F [Describe] No AI provider keys configured. Skipping PR description generation.");
     return null;
   }
-  const prompt = buildDescribePrompt(diff);
+  const maxDiffBudget = config2.maxDiffChars ?? (config2.maxDiffTokens ? config2.maxDiffTokens * 4 : 4e5);
+  const prompt = buildDescribePrompt(diff, maxDiffBudget);
   const options = {
     model: config2.model,
     fallbackModels: config2.fallbackModels,
@@ -21016,7 +21017,7 @@ ${generatedMarkdown}
 
 // src/prompts/reviewPrompt.ts
 var fs4 = __toESM(require("fs"));
-var ANTI_NITPICK_RULE = "\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.";
+var ANTI_NITPICK_RULE = "\n\nSTRICT ANTI-NITPICK FILTER: Do NOT comment on code formatting, whitespace, indentation, semicolons, quotes, or purely subjective variable naming. If a standard linter (ESLint, Prettier, Ruff) can enforce it, DO NOT mention it.\nNO STYLISTIC / IDIOMATIC CHURN: Never suggest refactoring between valid, functionally equivalent syntax (e.g. switching between async/await vs Promise chaining, loops vs .map/.forEach, if/else vs ternary, arrow vs function declaration, type vs interface) unless you can prove a concrete bug, race condition, memory leak, or security vulnerability. If the existing code is working and idiomatic, DO NOT touch it.";
 var SEVERITY_BADGES_INSTRUCTION = "\nSEVERITY RATING FORMAT: Prefix each finding with one of these standardized severity badges:\n- \u{1F6A8} **[BLOCKER]**: High/critical security vulnerabilities, data loss, crashes, or severe regressions.\n- \u26A0\uFE0F **[WARNING]**: Performance bottlenecks, resource leaks, edge-case bugs, or unhandled errors.\n- \u{1F4A1} **[SUGGESTION]**: Architectural enhancements or missing test coverage stubs (comprehensive mode only).\nDo NOT report low-value style opinions or manufacture non-existent issues.";
 var SEQUENCE_DIAGRAM_INSTRUCTION = '\nARCHITECTURE & WORKFLOW VISUALIZATION: If the pull request modifies or introduces multi-component interactions (e.g., client -> API -> database, or webhook -> verification -> state updates), provide a concise Mermaid sequence diagram (```mermaid sequenceDiagram ... ```) illustrating the end-to-end data flow. Always include `autonumber` on the line immediately following `sequenceDiagram` to ensure clear, sequential execution numbering. Use ONLY valid standard Mermaid sequence arrows: `->>` for requests/calls, `-->>` for responses/returns, and `-)` for async messages. NEVER embed words or extra characters inside arrows (e.g., do NOT write `--word->>`). NEVER repeat arrowheads (e.g., do NOT write `->->` or `-->-->`). NEVER use flowchart link syntax (e.g., do NOT write `-.->` or `==>`). NEVER use semicolons (`;`) inside message text or at ends of lines. Always map participant labels using `participant ID as "Display Name"` and avoid reserved keywords (`End`, `Loop`, `Note`) as raw participant IDs.';
 var REVIEW_FOCUS_MAP = {
@@ -42268,7 +42269,7 @@ ${commentTag}`;
 }
 
 // src/reviewer.ts
-function truncateDiffClean(diff, maxChars = 32e3) {
+function truncateDiffClean(diff, maxChars = 4e5) {
   if (diff.length <= maxChars) return diff;
   const truncated = diff.slice(0, maxChars);
   const lastHunkBoundary = truncated.lastIndexOf("\ndiff --git");
@@ -42393,10 +42394,11 @@ ${registryResult.notes.map((n) => `- ${n}`).join("\n")}
 `;
     }
   }
+  const maxDiffBudget = config2.maxDiffChars ?? (config2.maxDiffTokens ? config2.maxDiffTokens * 4 : 4e5);
   let truncatedDiff;
   let skippedFiles = [];
-  if (config2.enableSmartDiffPriority !== false && diff.length > 28e3) {
-    const priorityResult = packPrioritizedDiff(diff, 28e3);
+  if (config2.enableSmartDiffPriority !== false && diff.length > maxDiffBudget) {
+    const priorityResult = packPrioritizedDiff(diff, maxDiffBudget);
     truncatedDiff = priorityResult.packedDiff;
     skippedFiles = priorityResult.skippedFiles;
     console.log(priorityResult.priorityLog);
@@ -42404,8 +42406,8 @@ ${registryResult.notes.map((n) => `- ${n}`).join("\n")}
       console.log(`\u{1F5C2}\uFE0F Skipped files (low priority or budget): ${priorityResult.skippedFiles.slice(0, 10).join(", ")}${priorityResult.skippedFiles.length > 10 ? "..." : ""}`);
     }
   } else {
-    truncatedDiff = truncateDiffClean(diff);
-    if (diff.length > 32e3) {
+    truncatedDiff = truncateDiffClean(diff, maxDiffBudget);
+    if (diff.length > maxDiffBudget) {
       console.log(`\u26A0\uFE0F Large diff detected (${diff.length} chars) \u2014 truncated to ${truncatedDiff.length} chars at clean hunk boundary.`);
     }
   }
@@ -42947,6 +42949,7 @@ async function executeOnDemandReview(config2, providerManager, options, diff, re
   };
   const focus = focusMap[reviewLevel] ?? focusMap.standard;
   const label = reviewLevel === "full" ? "\u{1F50D} Full Comprehensive" : reviewLevel === "security" ? "\u{1F512} Security-Focused" : reviewLevel === "performance" ? "\u26A1 Performance-Focused" : "\u{1F4CB} Standard";
+  const maxDiffBudget = config2.maxDiffChars ?? (config2.maxDiffTokens ? config2.maxDiffTokens * 4 : 4e5);
   const prompt = `You are a Principal Software Engineer & DevSecOps Lead reviewing a Pull Request.
 This is an on-demand ${label} review triggered via \`/review ${reviewLevel}\` slash command.
 
@@ -42957,7 +42960,7 @@ If the code looks clean, respond with "\u2705 All changes look clean!" and a bri
 
 Git Diff:
 \`\`\`diff
-${diff.slice(0, 28e3)}
+${diff.slice(0, maxDiffBudget)}
 \`\`\``;
   const response = await providerManager.executeReview(prompt, options);
   if (!response) {
@@ -43197,6 +43200,14 @@ async function run() {
         commentTag: getOptionalInput("comment-tag", ["REVIEWGROUND_COMMENT_TAG", "COMMENT_TAG"]) || void 0,
         provider: getOptionalInput("provider", ["REVIEWGROUND_PROVIDER", "PROVIDER", "LLM_PROVIDER"]) || void 0,
         model: getOptionalInput("model", ["REVIEWGROUND_MODEL", "MODEL", "LLM_MODEL"]) || void 0,
+        maxDiffTokens: (() => {
+          const m = getOptionalInput("max-diff-tokens", ["REVIEWGROUND_MAX_DIFF_TOKENS", "DIFF_MAX_TOKENS"]);
+          return m ? parseInt(m, 10) : 1e5;
+        })(),
+        maxDiffChars: (() => {
+          const m = getOptionalInput("max-diff-chars", ["REVIEWGROUND_MAX_DIFF_CHARS", "DIFF_MAX_CHARS"]);
+          return m ? parseInt(m, 10) : void 0;
+        })(),
         geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY"]) || void 0,
         openaiApiKey: getOptionalInput("openai-api-key", ["OPENAI_API_KEY", "OPENAI_KEY"]) || void 0,
         anthropicApiKey: getOptionalInput("anthropic-api-key", ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_KEY", "CLAUDE_KEY"]) || void 0,
@@ -43228,6 +43239,14 @@ async function run() {
         })(),
         maxTokens: (() => {
           const m = getOptionalInput("max-tokens", ["REVIEWGROUND_MAX_TOKENS", "LLM_MAX_TOKENS"]);
+          return m ? parseInt(m, 10) : void 0;
+        })(),
+        maxDiffTokens: (() => {
+          const m = getOptionalInput("max-diff-tokens", ["REVIEWGROUND_MAX_DIFF_TOKENS", "DIFF_MAX_TOKENS"]);
+          return m ? parseInt(m, 10) : 1e5;
+        })(),
+        maxDiffChars: (() => {
+          const m = getOptionalInput("max-diff-chars", ["REVIEWGROUND_MAX_DIFF_CHARS", "DIFF_MAX_CHARS"]);
           return m ? parseInt(m, 10) : void 0;
         })(),
         geminiApiKey: getOptionalInput("gemini-api-key", ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY"]) || void 0,
@@ -43269,6 +43288,14 @@ async function run() {
         })(),
         maxTokens: (() => {
           const m = getOptionalInput("max-tokens", ["REVIEWGROUND_MAX_TOKENS", "LLM_MAX_TOKENS"]);
+          return m ? parseInt(m, 10) : void 0;
+        })(),
+        maxDiffTokens: (() => {
+          const m = getOptionalInput("max-diff-tokens", ["REVIEWGROUND_MAX_DIFF_TOKENS", "DIFF_MAX_TOKENS"]);
+          return m ? parseInt(m, 10) : 1e5;
+        })(),
+        maxDiffChars: (() => {
+          const m = getOptionalInput("max-diff-chars", ["REVIEWGROUND_MAX_DIFF_CHARS", "DIFF_MAX_CHARS"]);
           return m ? parseInt(m, 10) : void 0;
         })(),
         reviewLevel: getOptionalInput("review-level", ["REVIEWGROUND_REVIEW_LEVEL", "REVIEW_LEVEL"]) || "standard",
